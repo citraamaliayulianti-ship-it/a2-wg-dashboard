@@ -1,0 +1,350 @@
+schema_version: 2
+dashboard:
+  title: How fast is the world warming?
+  subject: global_warming
+  question: How fast is the world warming once El Niño and La Niña are set aside, and do the
+    major temperature records agree on the rate?
+  audience: Climate policy analysts in government and international agencies who track progress
+    against temperature goals
+  entrypoint: app.py
+  pages:
+  - home.py
+  - sections/1_warming_rate.py
+  - sections/2_el_nino.py
+  - sections/3_acceleration.py
+  - sections/4_conclusion.py
+  sample_environment_variable: DASHBOARD_SAMPLE_MODE
+sources:
+- id: nasa_gistemp
+  publisher: NASA Goddard Institute for Space Studies
+  title: 'GISS Surface Temperature Analysis (GISTEMP v4): global-mean monthly land-ocean temperature
+    index (GLB.Ts+dSST)'
+  url: https://data.giss.nasa.gov/gistemp/tabledata_v4/GLB.Ts+dSST.csv
+  licence: Public domain (United States government work); NASA asks users to cite GISTEMP Team and Lenssen et al.
+  retrieved: '2026-10-13'
+  cadence: Monthly, usually around the middle of the following month
+  status: snapshot
+  notes: Saved as data/raw/gistemp_v4_global.csv. Anomalies relative to 1951-1980; months not yet
+    reported are marked *** and are skipped. Starts January 1880.
+- id: noaa_globaltemp
+  publisher: NOAA National Centers for Environmental Information
+  title: 'Climate at a Glance: Global Time Series, monthly global land and ocean temperature anomalies
+    (NOAAGlobalTemp)'
+  url: https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/global/time-series/globe/land_ocean/1/0/1850-2026/data.csv
+  licence: Public domain (United States government work)
+  retrieved: '2026-10-13'
+  cadence: Monthly, usually in the second week of the following month
+  status: snapshot
+  notes: Saved as data/raw/noaa_globaltemp_monthly.csv. Departures from the 1901-2000 average.
+    Starts January 1850.
+- id: met_office_hadcrut5
+  publisher: Met Office Hadley Centre and Climatic Research Unit, University of East Anglia
+  title: HadCRUT.5.2.0.0 global monthly summary series (analysis)
+  url: https://www.metoffice.gov.uk/hadobs/hadcrut5/data/HadCRUT.5.2.0.0/analysis/diagnostics/HadCRUT.5.2.0.0.analysis.summary_series.global.monthly.csv
+  licence: Open Government Licence v3.0 (British Crown Copyright, Met Office)
+  retrieved: '2026-10-13'
+  cadence: Monthly
+  status: snapshot
+  notes: Saved as data/raw/hadcrut5_global_monthly.csv. Anomalies relative to 1961-1990 with the
+    2.5% and 97.5% limits of the 200-member ensemble. Starts January 1850.
+- id: berkeley_earth
+  publisher: Berkeley Earth
+  title: Global monthly land and ocean temperature anomalies, high-resolution product (Global_TAVG_monthly)
+  url: https://storage.googleapis.com/berkeley-earth-temperature-hr/global/Global_TAVG_monthly.txt
+  licence: Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)
+  retrieved: '2026-10-13'
+  cadence: Monthly
+  status: snapshot
+  notes: Saved as data/raw/berkeley_hr_global_tavg_monthly.txt (land analysis run 11 September
+    2026). The file is labelled preliminary and not yet peer reviewed by Berkeley Earth. Anomalies
+    relative to 1951-1980 with a 95% uncertainty; sea-ice areas use air temperatures when ice is
+    present. Replaces the 1-degree product (Land_and_Ocean_complete.txt), which stopped updating
+    in 2025 and ends in December 2024.
+- id: noaa_oni
+  publisher: NOAA Climate Prediction Center
+  title: Oceanic Niño Index (ONI), three-month running mean of ERSST.v5 sea-surface temperature
+    anomalies in the Niño 3.4 region
+  url: https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt
+  licence: Public domain (United States government work)
+  retrieved: '2026-10-13'
+  cadence: Monthly
+  status: snapshot
+  notes: Saved as data/raw/noaa_oni.txt. Anomalies relative to centred 30-year base periods updated
+    every 5 years. Each three-month season is dated to its middle month. Starts with DJF 1950.
+datasets:
+- id: record_month
+  source_ids:
+  - nasa_gistemp
+  - noaa_globaltemp
+  - met_office_hadcrut5
+  - berkeley_earth
+  - noaa_oni
+  sample: data/sample.csv
+  processed_output: data/processed.csv
+  format: csv
+  date_column: date
+  primary_key:
+  - date
+  - record_id
+  minimum_rows: 2000
+  latest_observation: '2026-09-30'
+  columns:
+    date:
+      type: date
+      role: time
+      nullable: false
+      date_minimum: '1850-01-31'
+      date_maximum: '2026-09-30'
+    year:
+      type: integer
+      role: time
+      nullable: false
+      minimum: 1850
+      maximum: 2026
+    month:
+      type: integer
+      role: time
+      nullable: false
+      minimum: 1
+      maximum: 12
+    record_id:
+      type: string
+      role: identifier
+      nullable: false
+      allowed_values:
+      - gistemp
+      - noaa
+      - hadcrut
+      - berkeley
+    record:
+      type: string
+      role: dimension
+      nullable: false
+      allowed_values:
+      - NASA GISTEMP v4
+      - NOAA GlobalTemp
+      - Met Office HadCRUT5
+      - Berkeley Earth
+    anomaly_c:
+      type: number
+      role: measure
+      nullable: false
+      unit: degrees Celsius, relative to the record's own 1991-2020 monthly means
+      minimum: -3
+      maximum: 3
+    lower_95_c:
+      type: number
+      role: measure
+      nullable: true
+      unit: degrees Celsius, relative to 1991-2020 (lower end of the published 95% range)
+      minimum: -3.5
+      maximum: 3
+    upper_95_c:
+      type: number
+      role: measure
+      nullable: true
+      unit: degrees Celsius, relative to 1991-2020 (upper end of the published 95% range)
+      minimum: -3
+      maximum: 3.5
+    reported_anomaly_c:
+      type: number
+      role: measure
+      nullable: false
+      unit: degrees Celsius, relative to the record's published baseline
+      minimum: -3
+      maximum: 3
+    reported_baseline:
+      type: string
+      role: dimension
+      nullable: false
+      allowed_values:
+      - 1951-1980
+      - 1901-2000
+      - 1961-1990
+    oni:
+      type: number
+      role: measure
+      nullable: true
+      unit: degrees Celsius (Niño 3.4 sea-surface temperature anomaly, three-month mean)
+      minimum: -3.5
+      maximum: 3.5
+views:
+- id: warming_rate
+  dataset_id: record_month
+  page: sections/1_warming_rate.py
+  title: How fast is the world warming, and do the records agree?
+  unit: °C per decade
+  source_ids:
+  - nasa_gistemp
+  - noaa_globaltemp
+  - met_office_hadcrut5
+  - berkeley_earth
+  - noaa_oni
+  controls:
+  - key: rate_period
+    type: slider
+    label: Years
+    default_value:
+    - 1970
+    - 2026
+    test_value:
+    - 1990
+    - 2026
+    filter:
+      column: year
+      operator: range
+  - key: rate_records
+    type: multiselect
+    label: Temperature records
+    default_value:
+    - NASA GISTEMP v4
+    - NOAA GlobalTemp
+    - Met Office HadCRUT5
+    - Berkeley Earth
+    test_value:
+    - NASA GISTEMP v4
+    - Met Office HadCRUT5
+    empty_test_value: []
+    empty_expected_text: No temperature records match the selected filters.
+    filter:
+      column: record
+      operator: isin
+  outputs:
+  - chart
+  - metric
+  - table
+  - download
+- id: enso_effect
+  dataset_id: record_month
+  page: sections/2_el_nino.py
+  title: How much of the year-to-year ups and downs is El Niño and La Niña?
+  unit: °C
+  source_ids:
+  - nasa_gistemp
+  - noaa_globaltemp
+  - met_office_hadcrut5
+  - berkeley_earth
+  - noaa_oni
+  controls:
+  - key: enso_period
+    type: slider
+    label: Years
+    default_value:
+    - 1950
+    - 2026
+    test_value:
+    - 1979
+    - 2026
+    filter:
+      column: year
+      operator: range
+  - key: enso_records
+    type: multiselect
+    label: Temperature records
+    default_value:
+    - NASA GISTEMP v4
+    - NOAA GlobalTemp
+    - Met Office HadCRUT5
+    - Berkeley Earth
+    test_value:
+    - NOAA GlobalTemp
+    empty_test_value: []
+    empty_expected_text: No temperature records match the selected filters.
+    filter:
+      column: record
+      operator: isin
+  - key: enso_lag
+    type: selectbox
+    label: Delay after the Pacific (months)
+    default_value: 2
+    test_value: 4
+  outputs:
+  - chart
+  - metric
+  - table
+  - download
+- id: acceleration
+  dataset_id: record_month
+  page: sections/3_acceleration.py
+  title: Has warming sped up once El Niño and La Niña are set aside?
+  unit: °C per decade
+  source_ids:
+  - nasa_gistemp
+  - noaa_globaltemp
+  - met_office_hadcrut5
+  - berkeley_earth
+  - noaa_oni
+  controls:
+  - key: accel_split
+    type: selectbox
+    label: Split the period in
+    default_value: 2010
+    test_value: 2000
+  - key: accel_records
+    type: multiselect
+    label: Temperature records
+    default_value:
+    - NASA GISTEMP v4
+    - NOAA GlobalTemp
+    - Met Office HadCRUT5
+    - Berkeley Earth
+    test_value:
+    - Berkeley Earth
+    - NOAA GlobalTemp
+    empty_test_value: []
+    empty_expected_text: No temperature records match the selected filters.
+    filter:
+      column: record
+      operator: isin
+  - key: accel_series
+    type: radio
+    label: Temperatures
+    default_value: El Niño and La Niña removed
+    test_value: As published
+  outputs:
+  - chart
+  - metric
+  - table
+  - download
+pipeline:
+  acquisition_method: script
+  acquisition_path: src/data.py
+  transform_command:
+  - python
+  - -m
+  - src.data
+  download_declared: true
+  download_label: Download filtered data (CSV)
+  date_label: Latest observation
+topic_integrity:
+  measurement_status: Observations only. All four temperature records are statistical reconstructions
+    of the global mean surface temperature from instrumental measurements (land weather stations,
+    ships, buoys and Argo floats), not model output, reanalysis or projections. The Oceanic Niño
+    Index is an observed sea-surface temperature index (ERSST.v5). Berkeley Earth labels its
+    high-resolution product preliminary and not yet peer reviewed. The dashboard fits straight lines
+    and a regression to these observations; it makes no forecasts and draws no lines beyond the
+    latest month.
+  geographic_coverage: Global means only (land and ocean combined, about 90°S to 90°N). The records
+    differ in how they fill areas with few observations; GISTEMP, HadCRUT5 (analysis) and Berkeley
+    Earth interpolate across data-sparse regions such as the Arctic, while NOAA GlobalTemp uses its
+    own reconstruction. The ONI covers the Niño 3.4 region of the equatorial Pacific (5°N-5°S,
+    170°W-120°W).
+  anomaly_baseline: Each record is published on its own baseline (GISTEMP and Berkeley Earth 1951-1980,
+    NOAA 1901-2000, HadCRUT5 1961-1990). The pipeline subtracts each record's own 1991-2020 mean
+    for every calendar month, so all four share the WMO 1991-2020 standard normal. The value as
+    published and its baseline are kept in reported_anomaly_c and reported_baseline. Comparisons
+    with 1850-1900 subtract each record's own 1850-1900 mean and use only the three records that
+    start in 1850.
+  uncertainty_treatment: Rates are reported with 95% confidence intervals from ordinary least squares,
+    widened for lag-1 autocorrelation of the residuals (effective sample size n(1-r)/(1+r), Student's
+    t). The ENSO coefficient has a 95% interval computed in the same way. Measurement and coverage
+    uncertainty published by HadCRUT5 (2.5-97.5% ensemble range) and Berkeley Earth (95% interval)
+    is carried in lower_95_c and upper_95_c but is not added to the trend intervals; GISTEMP and
+    NOAA publish no uncertainty in the files used.
+  enso_method: For each record, monthly anomalies are regressed on a quadratic function of time plus
+    the ONI shifted by a delay (0-6 months, default 2, the best fit for all four records over
+    1950-2026). The fitted ENSO part is subtracted to give the adjusted series. Volcanic, solar and
+    aerosol effects are not removed.
+  temporal_coverage: Monthly. GISTEMP January 1880 onward; NOAA, HadCRUT5 and Berkeley Earth January
+    1850 onward; ONI from the season centred on January 1950. Records end in different months
+    (shown on the overview page); latest observation in the dataset is September 2026.
