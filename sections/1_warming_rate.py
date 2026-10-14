@@ -18,7 +18,6 @@ with st.container(key="warming_rate"):
             "The lower chart puts the rates side by side with their 95% intervals, so you can see whether the "
             "records agree."
         ),
+        after=rate_summary,
     )
-st.divider()
-rate_summary(data)
 page_nav(previous=(HOME, "Overview"), following=(PAGE_ENSO, "El Niño and La Niña"))

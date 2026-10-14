@@ -69,7 +69,7 @@ def _record_colour(records: list[str]) -> alt.Scale:
     return alt.Scale(domain=RECORD_ORDER, range=[RECORD_COLOURS[r] for r in RECORD_ORDER])
 
 
-def _sources() -> None:
+def show_sources() -> None:
     lines = "  \n".join(f"{publisher}, {title}" for publisher, title in SOURCES)
     st.caption(f"**Sources:**  \n{lines}")
 
@@ -83,6 +83,16 @@ def _download(frame: pd.DataFrame, key: str, name: str) -> None:
     out["date"] = out["date"].dt.strftime("%Y-%m-%d")
     st.download_button(DOWNLOAD_LABEL, data=out.to_csv(index=False).encode("utf-8"), file_name=name,
                        mime="text/csv", key=key)
+
+
+def _finish(selected: pd.DataFrame, key: str, name: str, data: pd.DataFrame | None = None, after=None) -> None:
+    """End of a view: the download, then the page's own summary (if any), then the sources at the very bottom."""
+    _download(selected, key, name)
+    if after is not None and data is not None:
+        st.divider()
+        after(data)
+    st.divider()
+    show_sources()
 
 
 def _records_picker(data: pd.DataFrame, key: str) -> list[str]:
@@ -136,12 +146,11 @@ def _heading(page: str, number: int, data: pd.DataFrame) -> None:
 
 # ---------------------------------------------------------------- view 1
 
-def render_warming_rate(data: pd.DataFrame, intro: str | None = None) -> None:
+def render_warming_rate(data: pd.DataFrame, intro: str | None = None, after=None) -> None:
     """View 1: the warming rate in each record over a chosen period."""
     _heading("rate", 1, data)
     st.caption("Unit: °C per decade. Temperatures are monthly anomalies in °C, each record measured from its own "
                "1991–2020 average.")
-    _sources()
     _latest(data)
     if intro:
         st.markdown(intro)
@@ -155,13 +164,13 @@ def render_warming_rate(data: pd.DataFrame, intro: str | None = None) -> None:
     selected = data.loc[data["year"].between(first, last) & data["record"].isin(chosen)].copy()
     if selected.empty:
         st.info(EMPTY_MESSAGE)
-        _download(selected, "rate_download", "warming_rate_selection.csv")
+        _finish(selected, "rate_download", "warming_rate_selection.csv")
         return
 
     trends = record_trends(selected)
     if not trends:
         st.warning("Choose a period of at least two years to calculate a rate.")
-        _download(selected, "rate_download", "warming_rate_selection.csv")
+        _finish(selected, "rate_download", "warming_rate_selection.csv")
         return
     rates = pd.Series({r: t.rate for r, t in trends.items()})
 
@@ -180,7 +189,8 @@ def render_warming_rate(data: pd.DataFrame, intro: str | None = None) -> None:
         lines.append(pd.DataFrame({"record": record, "date": [part["date"].min(), part["date"].max()],
                                    "fitted": trend.value_at(np.array([when.min(), when.max()]))}))
     fitted = pd.concat(lines, ignore_index=True)
-    colour = alt.Color("record:N", title="Record", scale=_record_colour(chosen))
+    colour = alt.Color("record:N", title="Temperature record", scale=_record_colour(chosen),
+                       legend=alt.Legend(symbolType="stroke", symbolStrokeWidth=3, labelLimit=260))
     series = alt.Chart(smooth).mark_line(strokeWidth=1.6, opacity=0.9).encode(
         x=alt.X("date:T", title=None),
         y=alt.Y("running:Q", title="12-month mean anomaly (°C, vs 1991–2020)"),
@@ -189,10 +199,11 @@ def render_warming_rate(data: pd.DataFrame, intro: str | None = None) -> None:
                  alt.Tooltip("running:Q", title="12-month mean (°C)", format="+.2f")],
     )
     trend_lines = alt.Chart(fitted).mark_line(strokeWidth=2.4, strokeDash=[6, 4]).encode(
-        x="date:T", y="fitted:Q", color=alt.Color("record:N", scale=_record_colour(chosen), legend=None))
+        x="date:T", y="fitted:Q", color=colour)
     zero = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(color=MUTED, strokeDash=[2, 3]).encode(y="y:Q")
     st.altair_chart(_style((zero + series + trend_lines).properties(height=340)), width="stretch")
-    st.caption("Solid lines: 12-month running means (each point averages that month and the 11 before it). "
+    st.caption("Colours: blue NASA GISTEMP v4, orange NOAA GlobalTemp, green Met Office HadCRUT5, yellow Berkeley "
+               "Earth. Solid lines: 12-month running means (each point averages that month and the 11 before it). "
                "Dashed lines: the straight-line trend through every monthly value in the period. "
                "The dotted line marks the 1991–2020 average.")
 
@@ -226,7 +237,7 @@ def render_warming_rate(data: pd.DataFrame, intro: str | None = None) -> None:
            "uncertainty of a straight-line fit.")
         + f" The widest interval is ±{max(t.half_width for t in trends.values()):.2f} °C per decade."
     )
-    _download(selected, "rate_download", "warming_rate_selection.csv")
+    _finish(selected, "rate_download", "warming_rate_selection.csv", data, after)
 
 
 # ---------------------------------------------------------------- view 2
@@ -243,12 +254,11 @@ def enso_fits(selected: pd.DataFrame, lag: int) -> tuple[dict, pd.DataFrame]:
     return fits, (pd.concat(parts, ignore_index=True) if parts else pd.DataFrame())
 
 
-def render_enso(data: pd.DataFrame, intro: str | None = None) -> None:
+def render_enso(data: pd.DataFrame, intro: str | None = None, after=None) -> None:
     """View 2: how much of the year-to-year variation follows El Niño and La Niña."""
     _heading("enso", 2, data)
     st.caption("Unit: °C. Global temperatures are monthly anomalies (vs 1991–2020); the Oceanic Niño Index (ONI) is the "
                "sea-surface temperature anomaly of the central equatorial Pacific (Niño 3.4 region), in °C.")
-    _sources()
     _latest(data)
     if intro:
         st.markdown(intro)
@@ -265,13 +275,13 @@ def render_enso(data: pd.DataFrame, intro: str | None = None) -> None:
     selected = data.loc[data["year"].between(first, last) & data["record"].isin(chosen)].copy()
     if selected.empty:
         st.info(EMPTY_MESSAGE)
-        _download(selected, "enso_download", "el_nino_selection.csv")
+        _finish(selected, "enso_download", "el_nino_selection.csv")
         return
 
     fits, work = enso_fits(selected, lag)
     if not fits:
         st.warning("Choose a period of at least three years from 1950 onward, when the ONI begins.")
-        _download(selected, "enso_download", "el_nino_selection.csv")
+        _finish(selected, "enso_download", "el_nino_selection.csv")
         return
     effect = np.mean([f.enso_per_degree for f in fits.values()])
     annual = np.mean([f.annual_share for f in fits.values()])
@@ -348,7 +358,7 @@ def render_enso(data: pd.DataFrame, intro: str | None = None) -> None:
         f"year-to-year variation around the long-term curve; the rest comes from other sources that this dataset "
         f"does not separate."
     )
-    _download(selected, "enso_download", "el_nino_selection.csv")
+    _finish(selected, "enso_download", "el_nino_selection.csv", data, after)
 
 
 # ---------------------------------------------------------------- view 3
@@ -381,12 +391,11 @@ def period_rates(series: pd.DataFrame, column: str, split: int, start: int = FIR
     return pd.DataFrame(rows)
 
 
-def render_acceleration(data: pd.DataFrame, intro: str | None = None) -> None:
+def render_acceleration(data: pd.DataFrame, intro: str | None = None, after=None) -> None:
     """View 3: the rate before and after a chosen year, with or without the ENSO part."""
     _heading("acceleration", 3, data)
     st.caption("Unit: °C per decade, from monthly anomalies (vs 1991–2020). The earlier period always starts in "
                f"{FIRST_RATE_YEAR}; the later one runs to the latest month.")
-    _sources()
     _latest(data)
     if intro:
         st.markdown(intro)
@@ -402,7 +411,7 @@ def render_acceleration(data: pd.DataFrame, intro: str | None = None) -> None:
     selected = data.loc[data["record"].isin(chosen)].copy()
     if selected.empty:
         st.info(EMPTY_MESSAGE)
-        _download(selected, "accel_download", "acceleration_selection.csv")
+        _finish(selected, "accel_download", "acceleration_selection.csv")
         return
 
     series = adjusted_series(selected)
@@ -410,15 +419,15 @@ def render_acceleration(data: pd.DataFrame, intro: str | None = None) -> None:
     rates = period_rates(series, column, split)
     if rates.empty:
         st.warning("Not enough months on one side of the split to calculate a rate.")
-        _download(selected, "accel_download", "acceleration_selection.csv")
+        _finish(selected, "accel_download", "acceleration_selection.csv")
         return
 
-    before = np.mean([t.rate for t in rates["before"]])
-    after = np.mean([t.rate for t in rates["after"]])
+    rate_before = np.mean([t.rate for t in rates["before"]])
+    rate_after = np.mean([t.rate for t in rates["after"]])
     m1, m2, m3 = st.columns(3)
-    m1.metric(f"Rate {FIRST_RATE_YEAR}–{split - 1} (average of records)", f"{before:+.2f} °C per decade")
-    m2.metric(f"Rate since {split} (average of records)", f"{after:+.2f} °C per decade")
-    m3.metric("Change", f"{after - before:+.2f} °C per decade")
+    m1.metric(f"Rate {FIRST_RATE_YEAR}–{split - 1} (average of records)", f"{rate_before:+.2f} °C per decade")
+    m2.metric(f"Rate since {split} (average of records)", f"{rate_after:+.2f} °C per decade")
+    m3.metric("Change", f"{rate_after - rate_before:+.2f} °C per decade")
 
     points = []
     for _, row in rates.iterrows():
@@ -459,4 +468,4 @@ def render_acceleration(data: pd.DataFrame, intro: str | None = None) -> None:
         f"in {FIRST_RATE_YEAR}–{split - 1}. The 95% interval for the change excludes zero in {excludes} of "
         f"{len(rates)} records."
     )
-    _download(selected, "accel_download", "acceleration_selection.csv")
+    _finish(selected, "accel_download", "acceleration_selection.csv", data, after)

@@ -19,7 +19,6 @@ with st.container(key="enso_effect"):
             "which matches the Pacific a few months earlier. Where the two lines move together, El Niño and La Niña "
             "explain the ups and downs."
         ),
+        after=enso_summary,
     )
-st.divider()
-enso_summary(data)
 page_nav(previous=(PAGE_RATE, "Warming rate"), following=(PAGE_ACCEL, "Has it sped up?"))

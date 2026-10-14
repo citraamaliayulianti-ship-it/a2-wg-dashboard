@@ -18,7 +18,6 @@ with st.container(key="acceleration"):
             "El Niño and La Niña part (page 2) is removed first, so that a warm El Niño year at the end of a short "
             "period does not inflate the rate. Switch to 'As published' to compare."
         ),
+        after=acceleration_summary,
     )
-st.divider()
-acceleration_summary(data)
 page_nav(previous=(PAGE_ENSO, "El Niño and La Niña"), following=(PAGE_CONCLUSION, "Conclusion"))
