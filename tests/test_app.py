@@ -27,7 +27,7 @@ def _app(monkeypatch, page: str | None = None) -> AppTest:
 def test_overview_renders(monkeypatch) -> None:
     app = _app(monkeypatch)
     assert not app.exception
-    assert any("How fast is the world warming?" in item.value for item in app.markdown)
+    assert any("How fast is global surface temperature rising?" in item.value for item in app.markdown)
 
 
 def test_every_page_renders(monkeypatch) -> None:
@@ -40,12 +40,12 @@ def test_every_page_renders(monkeypatch) -> None:
 def test_empty_record_selection_shows_message(monkeypatch) -> None:
     app = _app(monkeypatch, PAGES[0])
     app.multiselect(key="rate_records").set_value([]).run()
-    assert any("No temperature records match" in item.value for item in app.info)
+    assert any("No datasets match" in item.value for item in app.info)
 
 
 def test_switching_to_published_values_runs(monkeypatch) -> None:
     app = _app(monkeypatch, PAGES[2])
-    app.radio(key="accel_series").set_value("As published").run()
+    app.radio(key="accel_series").set_value("Unadjusted").run()
     assert not app.exception
 
 

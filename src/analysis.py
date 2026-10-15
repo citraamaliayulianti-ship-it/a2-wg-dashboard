@@ -2,15 +2,15 @@
 
 All calculations work on monthly global temperature anomalies (°C).
 
-* ``fit_trend`` fits a straight line (ordinary least squares) and reports the
+* ``fit_trend`` fits a linear trend (ordinary least squares) and reports the
   rate in °C per decade with a 95% confidence interval. Monthly values are not
   independent - a warm month tends to be followed by another warm month - so the
   interval is widened using the lag-1 autocorrelation of the residuals
   (an AR(1) adjustment of the effective sample size, as in Santer et al. 2008).
 * ``fit_enso`` adds the Oceanic Niño Index (ONI), shifted by a lag in months, to
-  the straight line. Its coefficient says how many °C the global temperature
+  the trend terms. Its coefficient says how many °C the global temperature
   moves for each 1 °C of Niño-3.4 sea-surface anomaly, and lets us subtract the
-  El Niño/La Niña part to leave an "ENSO-adjusted" series.
+  ENSO component to leave an ENSO-adjusted series.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ Z95 = 0.975  # two-sided 95% interval
 
 @dataclass(frozen=True)
 class Trend:
-    """A straight-line trend over a period, in °C per decade."""
+    """A linear trend over a period, in °C per decade."""
 
     rate: float          # °C per decade
     low: float           # lower end of the 95% confidence interval
@@ -69,7 +69,7 @@ def _slope_interval(x: np.ndarray, residuals: np.ndarray, slope: float, extra_pa
 
 
 def fit_trend(when: np.ndarray, anomaly: np.ndarray) -> Trend:
-    """Straight line through monthly anomalies. ``when`` is in decimal years."""
+    """OLS linear trend through monthly anomalies. ``when`` is in decimal years."""
     x = np.asarray(when, dtype=float)
     y = np.asarray(anomaly, dtype=float)
     keep = np.isfinite(x) & np.isfinite(y)
@@ -85,13 +85,13 @@ def fit_trend(when: np.ndarray, anomaly: np.ndarray) -> Trend:
 
 
 def lagged_oni(frame: pd.DataFrame, lag: int) -> pd.Series:
-    """ONI from ``lag`` months earlier, matched month by month within each record."""
+    """ONI from ``lag`` months earlier, matched month by month within each dataset."""
     ordered = frame.sort_values(["record_id", "date"])
     shifted = ordered.groupby("record_id", sort=False)["oni"].shift(lag)
     return shifted.reindex(frame.index)
 
 
-TREND_DEGREE = 2  # the long-term curve is allowed to bend gently (a quadratic)
+TREND_DEGREE = 2  # quadratic long-term trend term
 
 
 @dataclass(frozen=True)
@@ -114,7 +114,7 @@ def _curve(x: np.ndarray, degree: int) -> np.ndarray:
 def fit_enso(frame: pd.DataFrame, lag: int, degree: int = TREND_DEGREE) -> tuple[EnsoFit, pd.DataFrame]:
     """Fit one record. ``frame`` holds one record_id with date, year, month, anomaly_c, oni.
 
-    Returns the fit and a table with the long-term curve, the ENSO part and the
+    Returns the fit and a table with the long-term trend, the ENSO component and the
     ENSO-adjusted values (original minus ENSO part).
     """
     work = frame.sort_values("date").copy()

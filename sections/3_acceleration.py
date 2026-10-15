@@ -1,4 +1,4 @@
-"""Question 3: has warming sped up once El Niño and La Niña are set aside?"""
+"""Research question 3: has global warming accelerated once the ENSO signal is removed?"""
 
 import streamlit as st
 
@@ -15,12 +15,12 @@ with st.container(key="acceleration"):
     render_acceleration(
         data,
         intro=(
-            "Choose a year to split the record. For each record, a straight line is fitted "
-            "before and after that year, and the two rates are shown with their 95% intervals. By default the "
-            "El Niño and La Niña part (page 2) is removed first, so that a warm El Niño year at the end of a short "
-            "period does not inflate the rate. Switch to 'As published' to compare."
+            "Select a breakpoint year. For each dataset, separate OLS linear trends are fitted before and after "
+            "that year and shown with their 95% confidence intervals. By default the ENSO component (page 2) is "
+            "removed first, so that El Niño conditions near the end of a short window do not bias the trend "
+            "upward. Select 'Unadjusted' to compare with the published series."
         ),
         after=acceleration_summary,
     )
-page_nav(previous=(PAGE_ENSO, "El Niño and La Niña"), following=(PAGE_CONCLUSION, "Conclusion"))
+page_nav(previous=(PAGE_ENSO, "ENSO influence"), following=(PAGE_CONCLUSION, "Conclusion"))
 footer()

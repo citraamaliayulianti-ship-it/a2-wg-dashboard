@@ -13,10 +13,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SAMPLE = ROOT / "data" / "sample.csv"
 PROCESSED = ROOT / "data" / "processed.csv"
 
-TITLE = "How fast is the world warming?"
+TITLE = "How fast is global surface temperature rising?"
 QUESTION = (
-    "How fast is the world warming once El Niño and La Niña are set aside, and do the major "
-    "temperature records agree on the rate?"
+    "What is the rate of global surface warming once the El Niño–Southern Oscillation (ENSO) signal is "
+    "removed, and do the major observational datasets agree on it?"
 )
 AUDIENCE = (
     "Climate policy analysts in government and international agencies who track progress "

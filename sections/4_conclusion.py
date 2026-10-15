@@ -10,11 +10,11 @@ from src.views import show_sources
 
 data = get_data()
 link_line("conclusion")
-section_heading("What the evidence shows, and what it does not", lead=QUESTION, kicker="Conclusion")
+section_heading("Findings, limitations and implications", lead=QUESTION, kicker="Conclusion")
 with st.container(key="panel_conclusion"):
     conclusion(data)
 methods_and_limitations()
 st.divider()
 show_sources()
-page_nav(previous=(PAGE_ACCEL, "Has it sped up?"), following=(HOME, "Back to the overview"))
+page_nav(previous=(PAGE_ACCEL, "Acceleration"), following=(HOME, "Overview"))
 footer()

@@ -1,9 +1,9 @@
 schema_version: 2
 dashboard:
-  title: How fast is the world warming?
+  title: How fast is global surface temperature rising?
   subject: global_warming
-  question: How fast is the world warming once El Niño and La Niña are set aside, and do the
-    major temperature records agree on the rate?
+  question: What is the rate of global surface warming once the El Niño–Southern Oscillation (ENSO)
+    signal is removed, and do the major observational datasets agree on it?
   audience: Climate policy analysts in government and international agencies who track progress
     against temperature goals
   entrypoint: app.py
@@ -129,7 +129,7 @@ datasets:
       type: number
       role: measure
       nullable: false
-      unit: degrees Celsius, relative to the record's own 1991-2020 monthly means
+      unit: degrees Celsius, relative to the dataset's own 1991-2020 monthly means
       minimum: -3
       maximum: 3
     lower_95_c:
@@ -150,7 +150,7 @@ datasets:
       type: number
       role: measure
       nullable: false
-      unit: degrees Celsius, relative to the record's published baseline
+      unit: degrees Celsius, relative to the dataset's published reference period
       minimum: -3
       maximum: 3
     reported_baseline:
@@ -172,7 +172,7 @@ views:
 - id: warming_rate
   dataset_id: record_month
   page: sections/1_warming_rate.py
-  title: How fast is the world warming, and do the records agree?
+  title: What is the rate of global surface warming, and do the datasets agree?
   unit: °C per decade
   source_ids:
   - nasa_gistemp
@@ -183,7 +183,7 @@ views:
   controls:
   - key: rate_period
     type: slider
-    label: Years
+    label: Period
     default_value:
     - 1970
     - 2026
@@ -195,7 +195,7 @@ views:
       operator: range
   - key: rate_records
     type: multiselect
-    label: Temperature records
+    label: Datasets
     default_value:
     - NASA GISTEMP v4
     - NOAA GlobalTemp
@@ -205,7 +205,7 @@ views:
     - NASA GISTEMP v4
     - Met Office HadCRUT5
     empty_test_value: []
-    empty_expected_text: No temperature records match the selected filters.
+    empty_expected_text: No datasets match the selected filters.
     filter:
       column: record
       operator: isin
@@ -217,7 +217,7 @@ views:
 - id: enso_effect
   dataset_id: record_month
   page: sections/2_el_nino.py
-  title: How much of the year-to-year ups and downs is El Niño and La Niña?
+  title: How much interannual variability in global temperature does ENSO explain?
   unit: °C
   source_ids:
   - nasa_gistemp
@@ -228,7 +228,7 @@ views:
   controls:
   - key: enso_period
     type: slider
-    label: Years
+    label: Period
     default_value:
     - 1950
     - 2026
@@ -240,7 +240,7 @@ views:
       operator: range
   - key: enso_records
     type: multiselect
-    label: Temperature records
+    label: Datasets
     default_value:
     - NASA GISTEMP v4
     - NOAA GlobalTemp
@@ -249,13 +249,13 @@ views:
     test_value:
     - NOAA GlobalTemp
     empty_test_value: []
-    empty_expected_text: No temperature records match the selected filters.
+    empty_expected_text: No datasets match the selected filters.
     filter:
       column: record
       operator: isin
   - key: enso_lag
     type: selectbox
-    label: Delay after the Pacific (months)
+    label: ONI lag (months)
     default_value: 2
     test_value: 4
   outputs:
@@ -266,7 +266,7 @@ views:
 - id: acceleration
   dataset_id: record_month
   page: sections/3_acceleration.py
-  title: Has warming sped up once El Niño and La Niña are set aside?
+  title: Has global warming accelerated once the ENSO signal is removed?
   unit: °C per decade
   source_ids:
   - nasa_gistemp
@@ -277,12 +277,12 @@ views:
   controls:
   - key: accel_split
     type: selectbox
-    label: Split the period in
+    label: Breakpoint year
     default_value: 2010
     test_value: 2000
   - key: accel_records
     type: multiselect
-    label: Temperature records
+    label: Datasets
     default_value:
     - NASA GISTEMP v4
     - NOAA GlobalTemp
@@ -292,15 +292,15 @@ views:
     - Berkeley Earth
     - NOAA GlobalTemp
     empty_test_value: []
-    empty_expected_text: No temperature records match the selected filters.
+    empty_expected_text: No datasets match the selected filters.
     filter:
       column: record
       operator: isin
   - key: accel_series
     type: radio
-    label: Temperatures
-    default_value: El Niño and La Niña removed
-    test_value: As published
+    label: Series
+    default_value: ENSO-adjusted
+    test_value: Unadjusted
   outputs:
   - chart
   - metric
@@ -317,34 +317,34 @@ pipeline:
   download_label: Download filtered data (CSV)
   date_label: Latest observation
 topic_integrity:
-  measurement_status: Observations only. All four temperature records are statistical reconstructions
+  measurement_status: Observations only. All four temperature datasets are statistical reconstructions
     of the global mean surface temperature from instrumental measurements (land weather stations,
     ships, buoys and Argo floats), not model output, reanalysis or projections. The Oceanic Niño
     Index is an observed sea-surface temperature index (ERSST.v5). Berkeley Earth labels its
-    high-resolution product preliminary and not yet peer reviewed. The dashboard fits straight lines
-    and a regression to these observations; it makes no forecasts and draws no lines beyond the
+    high-resolution product preliminary and not yet peer reviewed. The dashboard fits linear trends
+    and a regression to these observations; it makes no projections and extends no trend beyond the
     latest month.
-  geographic_coverage: Global means only (land and ocean combined, about 90°S to 90°N). The records
+  geographic_coverage: Global means only (land and ocean combined, about 90°S to 90°N). The datasets
     differ in how they fill areas with few observations; GISTEMP, HadCRUT5 (analysis) and Berkeley
     Earth interpolate across data-sparse regions such as the Arctic, while NOAA GlobalTemp uses its
     own reconstruction. The ONI covers the Niño 3.4 region of the equatorial Pacific (5°N-5°S,
     170°W-120°W).
-  anomaly_baseline: Each record is published on its own baseline (GISTEMP and Berkeley Earth 1951-1980,
-    NOAA 1901-2000, HadCRUT5 1961-1990). The pipeline subtracts each record's own 1991-2020 mean
+  anomaly_baseline: Each dataset is published relative to its own reference period (GISTEMP and Berkeley
+    Earth 1951-1980, NOAA 1901-2000, HadCRUT5 1961-1990). The pipeline subtracts each dataset's own 1991-2020 mean
     for every calendar month, so all four share the WMO 1991-2020 standard normal. The value as
     published and its baseline are kept in reported_anomaly_c and reported_baseline. Comparisons
-    with 1850-1900 subtract each record's own 1850-1900 mean and use only the three records that
-    start in 1850.
-  uncertainty_treatment: Rates are reported with 95% confidence intervals from ordinary least squares,
+    with 1850-1900 subtract each dataset's own 1850-1900 mean and use only the three datasets that
+    begin in 1850.
+  uncertainty_treatment: Linear trends are reported with 95% confidence intervals from ordinary least squares,
     widened for lag-1 autocorrelation of the residuals (effective sample size n(1-r)/(1+r), Student's
     t). The ENSO coefficient has a 95% interval computed in the same way. Measurement and coverage
     uncertainty published by HadCRUT5 (2.5-97.5% ensemble range) and Berkeley Earth (95% interval)
     is carried in lower_95_c and upper_95_c but is not added to the trend intervals; GISTEMP and
     NOAA publish no uncertainty in the files used.
-  enso_method: For each record, monthly anomalies are regressed on a quadratic function of time plus
-    the ONI shifted by a delay (0-6 months, default 2, the best fit for all four records over
-    1950-2026). The fitted ENSO part is subtracted to give the adjusted series. Volcanic, solar and
+  enso_method: For each dataset, monthly anomalies are regressed on a quadratic function of time plus
+    the ONI at a lag of 0-6 months (default 2, the best fit for all four datasets over 1950-2026).
+    The fitted ENSO component is subtracted to give the ENSO-adjusted series. Volcanic, solar and
     aerosol effects are not removed.
   temporal_coverage: Monthly. GISTEMP January 1880 onward; NOAA, HadCRUT5 and Berkeley Earth January
-    1850 onward; ONI from the season centred on January 1950. Records end in different months
+    1850 onward; ONI from the season centred on January 1950. Datasets end in different months
     (shown on the overview page); latest observation in the dataset is September 2026.

@@ -25,8 +25,8 @@ COOL, NEUTRAL, WARM = "#2a78d6", "#f0efec", "#e34948"
 
 PAGES = [  # (url path, label) for the link line under the top bar
     ("rate", "Warming rate"),
-    ("enso", "El Niño and La Niña"),
-    ("acceleration", "Has it sped up?"),
+    ("enso", "ENSO influence"),
+    ("acceleration", "Acceleration"),
     ("conclusion", "Conclusion"),
 ]
 
@@ -97,12 +97,12 @@ def apply_style() -> None:
 
 
 def link_line(current: str | None = None) -> None:
-    """'Global warming data: page | page | page' links under the top bar."""
+    """'Global surface temperature: page | page | page' links under the top bar."""
     links = []
     for path, label in PAGES:
         cls = ' class="gw-here"' if path == current else ""
         links.append(f'<a href="{path}" target="_self"{cls}>{html.escape(label)}</a>')
-    st.markdown(f'<div class="gw-links">Global warming data: {"<span class=gw-sep>|</span>".join(links)}</div>',
+    st.markdown(f'<div class="gw-links">Global surface temperature: {"<span class=gw-sep>|</span>".join(links)}</div>',
                 unsafe_allow_html=True)
 
 
@@ -145,7 +145,7 @@ def stripe_colour(value: float, limit: float = 1.0) -> str:
 
 
 def annual_means(data: pd.DataFrame, record_id: str = "noaa") -> pd.DataFrame:
-    """Complete calendar years only, for one record."""
+    """Complete calendar years only, for one dataset."""
     part = data.loc[data["record_id"] == record_id]
     counts = part.groupby("year")["anomaly_c"].agg(["mean", "size"])
     return counts.loc[counts["size"] == 12, ["mean"]].reset_index()
@@ -159,7 +159,7 @@ def stripes_centre(years: pd.DataFrame) -> tuple[float, str]:
 
 
 def stripes_svg(data: pd.DataFrame) -> str:
-    """One vertical stripe per complete year of the NOAA record, filling its container."""
+    """One vertical stripe per complete year of the NOAA dataset, filling its container."""
     years = annual_means(data)
     if years.empty:
         return ""

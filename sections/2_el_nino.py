@@ -1,4 +1,4 @@
-"""Question 2: how much of the year-to-year variation is El Niño and La Niña?"""
+"""Research question 2: how much interannual variability in global temperature does ENSO explain?"""
 
 import streamlit as st
 
@@ -15,13 +15,12 @@ with st.container(key="enso_effect"):
     render_enso(
         data,
         intro=(
-            "The top panel is the Oceanic Niño Index: red bars are El Niño (a warm central "
-            "Pacific), blue bars La Niña (a cool one). Below, for each record, the black line shows how far global "
-            "temperature sits above or below its long-term curve, and the red dashed line shows the part of that "
-            "which matches the Pacific a few months earlier. Where the two lines move together, El Niño and La Niña "
-            "explain the ups and downs."
+            "The top panel shows the Oceanic Niño Index (ONI): red bars mark El Niño conditions and blue bars La "
+            "Niña conditions in the equatorial Pacific. Below, for each dataset, the black line is the detrended "
+            "global temperature anomaly and the red dashed line is its ENSO component, estimated by regression on "
+            "the lagged ONI. Where the two lines coincide, ENSO accounts for the interannual variability."
         ),
         after=enso_summary,
     )
-page_nav(previous=(PAGE_RATE, "Warming rate"), following=(PAGE_ACCEL, "Has it sped up?"))
+page_nav(previous=(PAGE_RATE, "Warming rate"), following=(PAGE_ACCEL, "Acceleration"))
 footer()
