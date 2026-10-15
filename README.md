@@ -10,10 +10,10 @@ progress against temperature goals**. It asks:
 
 | Page | File | What it shows |
 |---|---|---|
-| Overview | `home.py` | The question and its three parts, warming relative to 1850–1900, the four records and the ONI, cards linking to each question, and data access |
-| 1. Warming rate | `sections/1_warming_rate.py` | View `warming_rate`: 12-month means and straight-line trends for any period and set of records, the rates with 95% intervals, and rates from different start years |
+| Overview | `home.py` | The question and audience over the warming stripes; annual global temperature compared with 1850–1900 for a selected record, with its 20-year average; the three questions; the four records and the ONI; data access |
+| 1. Warming rate | `sections/1_warming_rate.py` | View `warming_rate`: 12-month means and straight-line trends for any period and set of records beside the rates with 95% intervals, and rates from different start years |
 | 2. El Niño and La Niña | `sections/2_el_nino.py` | View `enso_effect`: the Oceanic Niño Index beside each record's deviation from its long-term curve, the effect per 1 °C of ONI, the share of variation explained, and the response after the largest El Niño peaks |
-| 3. Has it sped up? | `sections/3_acceleration.py` | View `acceleration`: rates before and after a chosen year, with or without the El Niño/La Niña part, and a check of commonly quoted short windows |
+| 3. Has it sped up? | `sections/3_acceleration.py` | View `acceleration`: annual means with the two straight lines beside each record's rates before and after a chosen year, with or without the El Niño/La Niña part, and a check of commonly quoted short windows |
 | Conclusion | `sections/4_conclusion.py` | What the data show, what they cannot tell us, what this means for policy analysts, next steps, methods and limitations |
 
 `app.py` holds the navigation (`st.navigation`, menu at the top).
@@ -57,8 +57,8 @@ rewrites the sample from the full data. Tests: `pytest`.
 baseline, the ONI join) and validation. `src/analysis.py` holds the calculations: straight-line rates with
 autocorrelation-adjusted 95% intervals, and the El Niño regression. Presentation lives in `src/views.py`
 (the three assessed views), `src/stories.py` (data-only page summaries, the conclusion and methods),
-`src/overview.py` (overview page parts), `src/theme.py` (page banners and warming stripes) and
-`src/loading.py` (cached data loading).
+`src/overview.py` (overview page parts), `src/theme.py` (page style, section headings, source lines, footer and
+warming stripes) and `src/loading.py` (cached data loading).
 
 ## Methods in brief
 
@@ -72,3 +72,13 @@ autocorrelation-adjusted 95% intervals, and the El Niño regression. Presentatio
 - **Charts.** Altair 6.3.0. Record colours follow the record across pages (blue GISTEMP, orange NOAA,
   aqua HadCRUT5, yellow Berkeley Earth), checked for colour-vision deficiency; every chart also has a
   legend and a table.
+
+## Design
+
+The layout follows the pattern of public climate-indicator portals such as the IMF Climate Change Indicators
+Dashboard: a solid blue top bar, a full-width picture under it, a line of links to every section, sections with
+a centred title and description, controls on the right above the charts, charts on white panels with a short
+source line under them, a right-aligned download button, and a blue footer. Only the pattern is borrowed; every
+picture and chart is drawn from this dashboard's own data (the picture is the warming stripes of the NOAA
+record). The style lives in `src/theme.py` (CSS injected once from `app.py`) and the colours of the page in
+`.streamlit/config.toml`.

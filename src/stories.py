@@ -100,7 +100,7 @@ def rate_summary(data: pd.DataFrame) -> None:
            f"- **The records differ.** From {base_start}, the rates lie between {base['low']:+.2f} and "
            f"{base['high']:+.2f} °C per decade, a spread of {spread:.2f}, wider than the narrowest 95% interval "
            f"({narrowest:.2f}).\n")
-        + (f"- **Shorter periods are less certain.** " if last_width > first_width else "- **Interval widths.** ")
+        + ("- **Shorter periods are less certain.** " if last_width > first_width else "- **Interval widths.** ")
         + f"Across records the 95% intervals span {summary.loc[earliest, 'ci_low']:+.2f} to "
         f"{summary.loc[earliest, 'ci_high']:+.2f} from {earliest}, and {summary.loc[latest_start, 'ci_low']:+.2f} to "
         f"{summary.loc[latest_start, 'ci_high']:+.2f} from {latest_start}."
@@ -225,11 +225,11 @@ def acceleration_summary(data: pd.DataFrame) -> None:
     later = adj.loc[recent, "Average rate (°C per decade)"]
     earlier = adj.loc[longest, "Average rate (°C per decade)"]
     st.markdown(
-        (f"- **Short windows are uncertain.** " if raw.loc[shortest, "width"] > raw.loc[longest, "width"] else "- ")
+        ("- **Short windows are uncertain.** " if raw.loc[shortest, "width"] > raw.loc[longest, "width"] else "- ")
         + f"As published, the {shortest} window's intervals span {raw.loc[shortest, 'width']:.2f} °C per decade, "
         f"against {raw.loc[longest, 'width']:.2f} for {longest}.\n"
-        + (f"- **Removing El Niño and La Niña narrows them.** " if narrower else
-           f"- **Removing El Niño and La Niña does not narrow them.** ")
+        + ("- **Removing El Niño and La Niña narrows them.** " if narrower else
+           "- **Removing El Niño and La Niña does not narrow them.** ")
         + f"For {shortest} the span becomes {adj.loc[shortest, 'width']:.2f} °C per decade.\n"
         + f"- **The rate since {recent[:4]} is {'higher' if later > earlier else 'not higher'} than in {longest}.** "
         f"With El Niño and La Niña removed, {recent} averages {later:+.2f} °C per decade, compared with "

@@ -1,114 +1,170 @@
-"""Building blocks of the overview page: hero, introduction, current position,
-about the data, question cards and data access.
+"""Building blocks of the overview page.
 
-The card pictures are miniature charts drawn from the dashboard's own data, and
-the stripes in the hero are one stripe per year of the NOAA record.
+Order on the page: a full-width picture with the title (the warming stripes,
+one stripe per year of the NOAA record), the line of links to every section,
+annual temperature compared with 1850-1900 for a record the reader selects,
+the three questions, the data, and how to get it.
 """
 
 from __future__ import annotations
 
 import html
 
+import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
 
 from src.data import ONI, RECORDS
-from src.stories import (PAGE_ACCEL, PAGE_CONCLUSION, PAGE_ENSO, PAGE_RATE, above_preindustrial, latest_year,
-                         rates_from)
-from src.theme import annual_means, stripes_centre, stripes_svg
-from src.views import COOL, FIRST_RATE_YEAR, INK, RECORD_COLOURS, RECORD_ORDER, SOURCES, WARM
+from src.stories import PAGE_ACCEL, PAGE_CONCLUSION, PAGE_ENSO, PAGE_RATE, PREINDUSTRIAL, above_preindustrial, rates_from
+from src.theme import annual_means, section_heading, source_line, stripes_centre, stripes_svg
+from src.views import COOL, FIRST_RATE_YEAR, INK, MUTED, SOURCES, WARM, _style, _title
 
 PUBLISHERS = {record_id: SOURCES[i][0] for i, record_id in enumerate(RECORDS)}
+SHORT_SOURCE = {  # short form for the source line under the chart
+    "NOAA GlobalTemp": "NOAA National Centers for Environmental Information",
+    "Met Office HadCRUT5": "Met Office Hadley Centre and Climatic Research Unit",
+    "Berkeley Earth": "Berkeley Earth",
+}
 
 
-# ---------------------------------------------------------------- hero banner
+# ---------------------------------------------------------------- picture with the title
 
 def hero(data: pd.DataFrame, title: str, question: str, audience: str) -> None:
-    """Opening banner: what the dashboard asks, for whom, and where to start."""
-    first = int(annual_means(data)["year"].min())
-    kicker = f"Global surface temperature · {first}–{latest_year(data)} · four records"
-    button = ("display:inline-block;padding:10px 18px;border-radius:8px;font-weight:600;font-size:15px;"
-              "text-decoration:none;margin:0 10px 10px 0;")
+    """Full-width warming stripes behind the title, the question and the audience."""
+    years = annual_means(data)
     st.markdown(
-        f'<div style="position:relative;overflow:hidden;border-radius:16px;background:#1d2833;'
-        f'padding:44px 40px 64px;margin-bottom:8px">'
-        f'<div style="position:relative;max-width:760px">'
-        f'<div style="font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#c9d6e3">'
-        f'{html.escape(kicker)}</div>'
-        f'<h1 style="color:#ffffff;font-size:2.6rem;line-height:1.15;margin:10px 0 14px;padding:0">'
-        f'{html.escape(title)}</h1>'
-        f'<p style="color:#e4ebf2;font-size:1.1rem;line-height:1.55;margin:0 0 16px">{html.escape(question)}</p>'
-        f'<div style="margin:0 0 22px"><span style="display:inline-block;background:rgba(255,255,255,0.14);'
-        f'color:#ffffff;border-radius:999px;padding:5px 14px;font-size:14px;line-height:1.45">'
-        f'For: {html.escape(audience[0].lower() + audience[1:])}</span></div>'
-        f'<a href="rate" target="_self" style="{button}background:#ffffff;color:#1d2833">Start with question 1 →</a>'
-        f'<a href="#about-the-data" target="_self" style="{button}border:1.5px solid #ffffff;color:#ffffff">About the data</a>'
-        f'<a href="#access-the-data" target="_self" style="{button}border:1.5px solid #ffffff;color:#ffffff">Access the data</a>'
-        f'</div>{stripes_svg(data, 34, "position:absolute;left:0;right:0;bottom:0")}</div>',
+        f'<div class="gw-hero">{stripes_svg(data)}<div class="gw-shade"></div><div class="gw-hero-text">'
+        f'<h1>{html.escape(title)}</h1><p>{html.escape(question)}</p>'
+        f'<p class="gw-for">For {html.escape(audience[0].lower() + audience[1:])}.</p></div></div>',
         unsafe_allow_html=True,
     )
-    _, centre = stripes_centre(annual_means(data))
-    st.caption(f"Stripes along the foot: one stripe per complete year, {first}–{int(annual_means(data)['year'].max())}, "
-               f"from the NOAA record; blue years were cooler and red years warmer than the {centre} average "
-               "(after Ed Hawkins' warming stripes).")
+    _, centre = stripes_centre(years)
+    st.caption(f"Picture: one stripe per complete year, {int(years['year'].min())}–{int(years['year'].max())}, from the "
+               f"NOAA record; blue years were cooler and red years warmer than the {centre} average (after Ed "
+               "Hawkins' warming stripes).")
 
 
-# ---------------------------------------------------------------- introduction
+# ---------------------------------------------------------------- annual change since 1850-1900
 
-def introduction() -> None:
-    st.subheader("Why this question matters")
-    st.markdown(
-        "Temperature goals such as the Paris Agreement's 1.5 °C refer to long-term warming, but the numbers that "
-        "reach the news are often single record years or rates for short recent periods. Three things decide "
-        "whether such a number can be trusted, and each has its own page."
-    )
-    cols = st.columns(3)
-    texts = [
-        ("1 · The rate and the records", "How many °C per decade, and do NASA, NOAA, the Met Office and Berkeley "
-         "Earth agree on it?"),
-        ("2 · The Pacific's swings", "How much of the year-to-year ups and downs comes from El Niño and La Niña?"),
-        ("3 · A faster pace?", "Once those swings are taken out, is the recent rate higher than before, and by more "
-         "than the uncertainty?"),
-    ]
-    for col, (head, body) in zip(cols, texts):
-        with col.container(border=True):
-            st.markdown(f"**{head}**  \n{body}")
-    st.markdown("The dashboard shows what the four records measure. It does not explain *why* the rate is what it "
-                "is, and it makes no forecasts.")
+def annual_vs_preindustrial(data: pd.DataFrame, record: str) -> pd.DataFrame:
+    """Calendar-year means (complete years) of one record, measured from its own 1850-1900 average."""
+    part = data.loc[data["record"] == record]
+    offset = part.loc[part["year"].between(*PREINDUSTRIAL), "anomaly_c"].mean()
+    years = part.groupby("year")["anomaly_c"].agg(["mean", "size"])
+    years = years.loc[years["size"] == 12, "mean"].sub(offset).rename("change_c").reset_index()
+    years["average_20_c"] = years["change_c"].rolling(20, min_periods=20).mean()
+    years["kind"] = np.where(years["change_c"] >= 0, "Warmer year", "Cooler year")
+    return years
 
 
-def where_things_stand(data: pd.DataFrame) -> None:
-    st.subheader("Where things stand")
+def temperature_change(data: pd.DataFrame) -> None:
     warm = above_preindustrial(data)
-    rates = rates_from(data, (FIRST_RATE_YEAR,))
+    if warm.empty:
+        return
+    section_heading(
+        "Annual global temperature compared with 1850–1900",
+        lead=("Each bar is one calendar year's average global surface temperature, measured from the 1850–1900 "
+              "average that the Paris Agreement uses as its pre-industrial reference. The line is the average of "
+              "the 20 years up to each year, the kind of long-term figure the 1.5 °C goal refers to."),
+        kicker="Where things stand",
+    )
+    options = list(warm["record"])
+    _, pick = st.columns([3, 1.3])
+    record = pick.selectbox("Select a temperature record", options, key="home_record",
+                            index=options.index("NOAA GlobalTemp") if "NOAA GlobalTemp" in options else 0)
+    years = annual_vs_preindustrial(data, record)
+    row = warm.set_index("record").loc[record]
+    rates = rates_from(data, (FIRST_RATE_YEAR,)).set_index("record")
+
     cols = st.columns(3)
-    if not warm.empty:
-        cols[0].metric(f"Warming, {warm.iloc[0]['twenty_label']} average vs 1850–1900",
-                       f"{warm['twenty_year'].mean():.2f} °C",
-                       help=f"Range across the {len(warm)} records that start in 1850: "
-                            f"{warm['twenty_year'].min():.2f}–{warm['twenty_year'].max():.2f} °C.")
-        cols[1].metric("Latest 12 months vs 1850–1900", f"{warm['last_12'].mean():.2f} °C",
-                       help="Each record's 12 most recent months: "
-                            + "; ".join(f"{r}: {v:.2f} °C ({lbl})" for r, v, lbl in
-                                        zip(warm["record"], warm["last_12"], warm["last_12_label"])))
-    if not rates.empty:
-        cols[2].metric(f"Warming rate since {FIRST_RATE_YEAR}", f"{rates['rate'].mean():.2f} °C per decade",
-                       help=f"Average of the four records; range {rates['rate'].min():.2f}–{rates['rate'].max():.2f}.")
-    st.caption("Values are averages of the records that cover each period (GISTEMP starts in 1880, so it is left out "
-               "of the 1850–1900 comparisons). The Paris Agreement's 1.5 °C refers to a long-term average, so the "
-               "20-year figure is the comparable one; single months or years can sit above or below it.")
+    cols[0].metric(f"Warming, {row['twenty_label']} average", f"{row['twenty_year']:.2f} °C",
+                   help=f"All {len(warm)} records that start in 1850: "
+                        f"{warm['twenty_year'].min():.2f}–{warm['twenty_year'].max():.2f} °C.")
+    cols[1].metric(f"Latest 12 months ({row['last_12_label']})", f"{row['last_12']:.2f} °C",
+                   help=f"All {len(warm)} records: {warm['last_12'].min():.2f}–{warm['last_12'].max():.2f} °C.")
+    if record in rates.index:
+        cols[2].metric(f"Warming rate since {FIRST_RATE_YEAR}", f"{rates.loc[record, 'rate']:.2f} °C per decade",
+                       help=f"All four records: {rates['rate'].min():.2f}–{rates['rate'].max():.2f} °C per decade.")
+
+    kinds = ["Cooler year", "Warmer year", "20-year average"]
+    colour = alt.Color("kind:N", title=None, scale=alt.Scale(domain=kinds, range=[COOL, WARM, "#2b2b29"]),
+                       legend=alt.Legend(orient="bottom", labelFontSize=11, columnPadding=8))
+    first, last = int(years["year"].min()), int(years["year"].max())
+    x = alt.X("x0:Q", title=None, scale=alt.Scale(domain=[first, last + 1], nice=False, zero=False),
+              axis=alt.Axis(format="d", tickCount=10))
+    bars = alt.Chart(years.assign(x0=years["year"] + 0.08, x1=years["year"] + 0.92)).mark_bar().encode(
+        x=x, x2="x1:Q", y=alt.Y("change_c:Q", title="°C, vs 1850–1900"), y2=alt.datum(0), color=colour,
+        tooltip=[alt.Tooltip("year:Q", title="Year", format="d"),
+                 alt.Tooltip("change_c:Q", title="Annual mean (°C vs 1850–1900)", format="+.2f"),
+                 alt.Tooltip("average_20_c:Q", title="20-year average (°C)", format="+.2f")])
+    line = alt.Chart(years.dropna(subset=["average_20_c"]).assign(x0=lambda f: f["year"] + 0.5,
+                                                                   kind="20-year average")).mark_line(
+        strokeWidth=2.6).encode(x=x, y="average_20_c:Q", color=colour)
+    goal = pd.DataFrame({"y": [1.5], "x0": [first + 1], "text": ["1.5 °C"]})
+    rule = alt.Chart(goal).mark_rule(color=MUTED, strokeDash=[4, 4]).encode(y="y:Q")
+    note = alt.Chart(goal).mark_text(align="left", dy=-8, color=INK, fontSize=12).encode(x=x, y="y:Q", text="text:N")
+
+    with st.container(key="panel_home_change"):
+        chart = (rule + note + bars + line).properties(
+            height=400, title=_title("Annual temperature vs 1850–1900", record))
+        st.altair_chart(_style(chart), width="stretch")
+        source_line(f"Source: {SHORT_SOURCE.get(record, record)}. Change from 1850–1900 calculated for this dashboard.")
+        st.caption("Red bars: years warmer than the 1850–1900 average; blue bars: cooler years. Dark line: average of "
+                   "the 20 years up to and including each year. Dashed line: 1.5 °C. Single years above it do not "
+                   "mean the Paris goal has been passed, because the goal refers to the long-term average. "
+                   "Only complete calendar years are shown.")
+    out = years[["year", "change_c", "average_20_c"]].assign(record=record)
+    st.download_button("Download these annual values (CSV)", data=out.to_csv(index=False).encode("utf-8"),
+                       file_name=f"annual_change_vs_1850_1900_{record.split()[0].lower()}.csv", mime="text/csv",
+                       key="home_download")
+
+
+# ---------------------------------------------------------------- the three questions
+
+QUESTIONS = [
+    (PAGE_RATE, "Question 1", "The rate and the records",
+     "How many °C per decade, and do NASA, NOAA, the Met Office and Berkeley Earth agree on it?",
+     "Open page 1"),
+    (PAGE_ENSO, "Question 2", "The Pacific's swings",
+     "How much of the year-to-year ups and downs comes from El Niño and La Niña?",
+     "Open page 2"),
+    (PAGE_ACCEL, "Question 3", "A faster pace?",
+     "Once those swings are taken out, is the recent rate higher than before, and by more than the uncertainty?",
+     "Open page 3"),
+]
+
+
+def questions() -> None:
+    section_heading(
+        "Why this question matters",
+        lead=("Temperature goals such as the Paris Agreement's 1.5 °C refer to long-term warming, but the numbers that "
+              "reach the news are often single record years or rates for short recent periods. Three things decide "
+              "whether such a number can be trusted, and each has its own page. The dashboard shows what the four "
+              "records measure; it does not explain why the rate is what it is, and it makes no forecasts."),
+        kicker="Three questions",
+    )
+    for column, (page, kicker, head, body, link) in zip(st.columns(3), QUESTIONS):
+        with column.container(key=f"panel_{kicker.replace(' ', '_').lower()}"):
+            st.caption(kicker.upper())
+            st.markdown(f"#### {head}")
+            st.markdown(body)
+            st.page_link(page, label=link, icon=":material/arrow_forward:")
+    _, middle, _ = st.columns([1, 2, 1])
+    middle.page_link(PAGE_CONCLUSION, label="Read the conclusion: what the evidence shows, and what it does not",
+                     icon=":material/flag:")
 
 
 # ---------------------------------------------------------------- about the data
 
 def about_the_data(data: pd.DataFrame) -> None:
-    st.subheader("About the data")
-    st.markdown(
-        "Four groups independently turn millions of thermometer readings from weather stations, ships and buoys "
-        "into one global average per month. They use overlapping raw data but different methods to fill gaps "
-        "(the Arctic, Africa and the Southern Ocean have few stations), to correct for changes in instruments, and "
-        "to treat areas of sea ice. Comparing them shows how much those choices matter."
+    section_heading(
+        "About the data",
+        lead=("Four groups independently turn millions of thermometer readings from weather stations, ships and buoys "
+              "into one global average per month. They use overlapping raw data but different methods to fill gaps "
+              "(the Arctic, Africa and the Southern Ocean have few stations), to correct for changes in instruments, "
+              "and to treat areas of sea ice. Comparing them shows how much those choices matter."),
+        kicker="Four records and one index",
     )
     rows = []
     for record_id, spec in RECORDS.items():
@@ -119,133 +175,55 @@ def about_the_data(data: pd.DataFrame) -> None:
                      "Months": f"{part['date'].min():%b %Y}–{part['date'].max():%b %Y}",
                      "Published baseline": spec["baseline"],
                      "Uncertainty range": "Yes" if part["lower_95_c"].notna().any() else "Not in this file"})
-    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
-    st.caption("Berkeley Earth's original product stopped updating in 2025, so its new high-resolution product is "
-               "used; Berkeley Earth labels that file preliminary and not yet peer reviewed. Its rates match the other "
-               "records closely (page 1).")
-    st.markdown(
-        "- **Anomaly.** Each value is how much warmer or cooler a month was than the average for that calendar month "
-        "over a reference period. Anomalies are used because they vary smoothly across large areas, unlike actual "
-        "temperatures.\n"
-        "- **One baseline for all.** The records use different reference periods, so this dashboard moves all of them "
-        "to 1991–2020, the World Meteorological Organization's current standard. This shifts each line up or down "
-        "but does not change any rate.\n"
-        "- **El Niño and La Niña.** The Oceanic Niño Index (ONI) from NOAA's Climate Prediction Center measures how "
-        "much warmer (El Niño, +0.5 °C or more) or cooler (La Niña, −0.5 °C or less) than normal the surface of the "
-        "central equatorial Pacific is, as a three-month average. It starts in 1950."
-    )
-
-
-# ---------------------------------------------------------------- question cards
-
-_W, _H, _P = 320, 170, 14
-_FRAME = (f'<svg viewBox="0 0 {_W} {_H}" width="100%" role="img" aria-label="{{label}}" '
-          f'style="background:#f6f6f3;border-radius:8px;display:block">{{body}}</svg>')
-
-
-def _scale(values, low, high, out_low, out_high):
-    return out_low + (np.clip(values, low, high) - low) / (high - low) * (out_high - out_low)
-
-
-def _thumb_rate(data: pd.DataFrame) -> str:
-    parts = []
-    for record in RECORD_ORDER:
-        part = data.loc[(data["record"] == record) & (data["year"] >= 1950)].sort_values("date")
-        smooth = part["anomaly_c"].rolling(12).mean().to_numpy()
-        xs = np.linspace(_P, _W - _P, len(part))
-        ys = _scale(smooth, -1.0, 1.0, _H - _P, _P)
-        pts = " ".join(f"{x:.1f},{y:.1f}" for x, y in zip(xs, ys) if np.isfinite(y))
-        parts.append(f'<polyline points="{pts}" fill="none" stroke="{RECORD_COLOURS[record]}" stroke-width="1.3" '
-                     f'stroke-opacity="0.85"/>')
-    return _FRAME.format(label="Miniature line chart of the four records since 1950", body="".join(parts))
-
-
-def _thumb_enso(data: pd.DataFrame) -> str:
-    oni = data.loc[(data["record_id"] == "noaa") & data["oni"].notna() & (data["year"] >= 1970)].sort_values("date")
-    xs = np.linspace(_P, _W - _P, len(oni))
-    mid = _H / 2
-    bars = []
-    for x, v in zip(xs, oni["oni"]):
-        h = abs(v) / 2.7 * (_H / 2 - _P)
-        bars.append(f'<rect x="{x:.1f}" y="{mid - h if v > 0 else mid:.1f}" width="0.8" height="{h:.1f}" '
-                    f'fill="{WARM if v > 0 else COOL}"/>')
-    return _FRAME.format(label="Miniature bar chart of the Oceanic Niño Index",
-                         body=f'<line x1="{_P}" y1="{mid}" x2="{_W - _P}" y2="{mid}" stroke="{INK}"/>' + "".join(bars))
-
-
-def _thumb_acceleration(data: pd.DataFrame) -> str:
-    years = annual_means(data)
-    years = years.loc[years["year"] >= 1970]
-    hi = years["year"].max()
-    xs = _scale(years["year"].to_numpy(float), 1970, hi, _P, _W - _P)
-    ys = _scale(years["mean"].to_numpy(), -0.7, 0.8, _H - _P, _P)
-    dots = "".join(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.6" fill="#898781"/>' for x, y in zip(xs, ys))
-    lines = ""
-    for low, high, colour in ((1970, 2009, "#898781"), (2010, hi, "#2a78d6")):
-        part = years.loc[years["year"].between(low, high)]
-        fit = np.polyfit(part["year"], part["mean"], 1)
-        x0, x1 = _scale(np.array([low, high], float), 1970, hi, _P, _W - _P)
-        y0, y1 = _scale(np.polyval(fit, [low, high]), -0.7, 0.8, _H - _P, _P)
-        lines += f'<line x1="{x0:.1f}" y1="{y0:.1f}" x2="{x1:.1f}" y2="{y1:.1f}" stroke="{colour}" stroke-width="2.4"/>'
-    return _FRAME.format(label="Miniature chart of annual means with two trend lines", body=dots + lines)
-
-
-def _thumb_conclusion(data: pd.DataFrame) -> str:
-    rates = rates_from(data, (FIRST_RATE_YEAR,))
-    value = rates["rate"].mean() if not rates.empty else float("nan")
-    body = (f'<text x="{_W / 2}" y="84" text-anchor="middle" font-size="50" font-weight="700" fill="{WARM}">'
-            f'{value:+.2f} °C</text>'
-            f'<text x="{_W / 2}" y="116" text-anchor="middle" font-size="17" fill="{INK}">per decade since '
-            f'{FIRST_RATE_YEAR}.</text><text x="{_W / 2}" y="138" text-anchor="middle" font-size="17" fill="{INK}">'
-            f'What changes the picture?</text>')
-    return _FRAME.format(label="Headline warming rate", body=body)
-
-
-def question_cards(data: pd.DataFrame) -> None:
-    st.subheader("Explore the questions")
-    st.markdown("Each question has its own page with interactive charts, a short reading of what the data show, and "
-                "a download of the selected data. The pictures are miniature versions of each page's chart.")
-    cards = [
-        (PAGE_RATE, "QUESTION 1", "How fast is the world warming, and do the records agree?", _thumb_rate(data)),
-        (PAGE_ENSO, "QUESTION 2", "How much of the year-to-year ups and downs is El Niño and La Niña?", _thumb_enso(data)),
-        (PAGE_ACCEL, "QUESTION 3", "Has warming sped up once El Niño and La Niña are set aside?", _thumb_acceleration(data)),
-        (PAGE_CONCLUSION, "CONCLUSION", "What the evidence shows, and what it does not", _thumb_conclusion(data)),
-    ]
-    columns = st.columns(4)
-    for column, (page, kicker, title, picture) in zip(columns, cards):
-        with column.container(border=True):
-            st.markdown(picture, unsafe_allow_html=True)
-            st.caption(kicker)
-            st.markdown(f"**{title}**")
-            st.page_link(page, label="Open page", icon=":material/arrow_forward:")
+    with st.container(key="panel_about"):
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+        st.caption("Berkeley Earth's original product stopped updating in 2025, so its new high-resolution product is "
+                   "used; Berkeley Earth labels that file preliminary and not yet peer reviewed. Its rates match the "
+                   "other records closely (page 1).")
+        st.markdown(
+            "- **Anomaly.** Each value is how much warmer or cooler a month was than the average for that calendar "
+            "month over a reference period. Anomalies are used because they vary smoothly across large areas, unlike "
+            "actual temperatures.\n"
+            "- **One baseline for all.** The records use different reference periods, so this dashboard moves all of "
+            "them to 1991–2020, the World Meteorological Organization's current standard. This shifts each line up or "
+            "down but does not change any rate. The overview chart above uses 1850–1900 instead, to match the Paris "
+            "Agreement.\n"
+            "- **El Niño and La Niña.** The Oceanic Niño Index (ONI) from NOAA's Climate Prediction Center measures how "
+            "much warmer (El Niño, +0.5 °C or more) or cooler (La Niña, −0.5 °C or less) than normal the surface of "
+            "the central equatorial Pacific is, as a three-month average. It starts in 1950."
+        )
 
 
 # ---------------------------------------------------------------- data access
 
 def access_data(data: pd.DataFrame) -> None:
-    st.subheader("Access the data")
+    section_heading(
+        "Access the data",
+        lead=("Every question page has a download of the records and years you select. The complete table and the "
+              "original files are here."),
+        kicker="Downloads and links",
+    )
     left, middle, right = st.columns(3)
-    with left:
-        st.markdown("#### :blue[Download this dashboard's data]")
+    with left.container(key="panel_access_download"):
+        st.markdown("#### This dashboard's data")
         st.markdown(
-            "Each question page has a download button for the records and years you select. The complete table "
-            f"behind this dashboard ({len(data):,} record-months, {data.shape[1]} columns: the anomaly on the common "
-            "baseline, the value as published, the uncertainty range where given, and the ONI) is available here."
+            f"The complete table behind this dashboard: {len(data):,} record-months, {data.shape[1]} columns (the "
+            "anomaly on the common baseline, the value as published, the uncertainty range where given, and the ONI)."
         )
         out = data.copy()
         out["date"] = out["date"].dt.strftime("%Y-%m-%d")
         st.download_button("Download the full dataset (CSV)", data=out.to_csv(index=False).encode("utf-8"),
                            file_name="global_temperature_records.csv", mime="text/csv", key="full_dataset_download")
-    with middle:
-        st.markdown("#### :green[Original files]")
+    with middle.container(key="panel_access_files"):
+        st.markdown("#### Original files")
         st.markdown(
             "The five files were downloaded on 13 October 2026. The pipeline (`src/data.py`) repeats the downloads "
             "with `python -m src.data --acquire`."
         )
         st.markdown("\n".join(f"- [{spec['label']}]({spec['url']})" for spec in RECORDS.values())
                     + f"\n- [Oceanic Niño Index]({ONI['url']})")
-    with right:
-        st.markdown("#### :orange[Explore further]")
+    with right.container(key="panel_access_more"):
+        st.markdown("#### Explore further")
         st.markdown(
             "Each publisher explains its method and offers maps, regional series and gridded data that go beyond "
             "the global averages used here."

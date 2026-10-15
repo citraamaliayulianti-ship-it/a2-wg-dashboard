@@ -14,7 +14,7 @@ import streamlit as st
 
 from src.analysis import (Trend, decimal_year, difference_interval, fit_enso, fit_trend, format_interval,
                           format_rate)
-from src.theme import BANNER, banner, pattern_acceleration, pattern_enso, pattern_rate
+from src.theme import section_heading, source_line
 
 
 DOWNLOAD_LABEL = "Download filtered data (CSV)"
@@ -62,7 +62,27 @@ def _style(chart: alt.Chart) -> alt.Chart:
                              titleColor=INK, titleFontWeight="normal", labelFontSize=12, titleFontSize=12)
         .configure_view(strokeWidth=0)
         .configure_legend(labelColor=INK, titleColor=INK, orient="top", labelFontSize=12, titleFontSize=12)
+        .configure_title(anchor="middle", fontSize=15, fontWeight=600, color="#2b2b29", offset=12)
+        .properties(background="transparent")  # take the white of the panel around the chart
     )
+
+
+def _title(text: str, subtitle: str | list[str] | None = None) -> alt.TitleParams:
+    """Centred chart title; short enough to fit a phone, with the detail in a smaller subtitle."""
+    if subtitle is None:
+        return alt.TitleParams(text, anchor="middle")
+    return alt.TitleParams(text, anchor="middle", subtitle=subtitle, subtitleColor=MUTED, subtitleFontSize=12)
+
+
+def _panel(key: str):
+    """White panel for charts (styled in src/theme.py through its key)."""
+    return st.container(key=f"panel_{key}")
+
+
+CHART_SOURCE = ("Source: NASA GISS; NOAA NCEI; Met Office Hadley Centre and CRU; Berkeley Earth. "
+                "Rates calculated for this dashboard.")
+ENSO_SOURCE = ("Source: NOAA Climate Prediction Center (ONI); NASA GISS; NOAA NCEI; Met Office Hadley Centre and "
+               "CRU; Berkeley Earth. Fits calculated for this dashboard.")
 
 
 def _record_colour(records: list[str]) -> alt.Scale:
@@ -74,8 +94,8 @@ def show_sources() -> None:
     st.caption(f"**Sources:**  \n{lines}")
 
 
-def _latest(data: pd.DataFrame) -> None:
-    st.caption(f"{DATE_LABEL}: {data['date'].max().date().isoformat()}")
+def _latest_text(data: pd.DataFrame) -> str:
+    return f"{DATE_LABEL}: {data['date'].max().date().isoformat()}"
 
 
 def _download(frame: pd.DataFrame, key: str, name: str) -> None:
@@ -89,8 +109,8 @@ def _finish(selected: pd.DataFrame, key: str, name: str, data: pd.DataFrame | No
     """End of a view: the download, then the page's own summary (if any), then the sources at the very bottom."""
     _download(selected, key, name)
     if after is not None and data is not None:
-        st.divider()
-        after(data)
+        with _panel(f"{key}_summary"):
+            after(data)
     st.divider()
     show_sources()
 
@@ -127,38 +147,35 @@ def record_trends(frame: pd.DataFrame, column: str = "anomaly_c") -> dict[str, T
     return trends
 
 
-TITLES = {
+TITLES = {  # the same titles as the views in dashboard.yml
     "rate": "How fast is the world warming, and do the records agree?",
     "enso": "How much of the year-to-year ups and downs is El Niño and La Niña?",
     "acceleration": "Has warming sped up once El Niño and La Niña are set aside?",
 }
-SUBTITLES = {
-    "rate": "Four independent temperature records, one straight-line rate for any period you choose.",
-    "enso": "Global temperature follows the Pacific's El Niño and La Niña cycle with a short delay.",
-    "acceleration": "Compare the rate before and after a year you choose, with the El Niño swings taken out.",
-}
-PATTERNS = {"rate": pattern_rate, "enso": pattern_enso, "acceleration": pattern_acceleration}
 
 
-def _heading(page: str, number: int, data: pd.DataFrame) -> None:
-    banner(f"Question {number} of 3", TITLES[page], SUBTITLES[page], BANNER[page], data, PATTERNS[page](data))
+def _heading(page: str, number: int, data: pd.DataFrame, unit: str, intro: str | None) -> None:
+    """Centred title and description, then the unit and the latest observation as small print."""
+    section_heading(TITLES[page], lead=intro or [], kicker=f"Question {number} of 3",
+                    meta=[unit, _latest_text(data)])
+
+
+def _controls(weights: list[float]) -> list:
+    """Controls sit on the right, above the charts; the first (empty) column pushes them across."""
+    return st.columns([0.5, *weights], vertical_alignment="bottom")[1:]
 
 
 # ---------------------------------------------------------------- view 1
 
 def render_warming_rate(data: pd.DataFrame, intro: str | None = None, after=None) -> None:
     """View 1: the warming rate in each record over a chosen period."""
-    _heading("rate", 1, data)
-    st.caption("Unit: °C per decade. Temperatures are monthly anomalies in °C, each record measured from its own "
-               "1991–2020 average.")
-    _latest(data)
-    if intro:
-        st.markdown(intro)
+    _heading("rate", 1, data, "Unit: °C per decade. Temperatures are monthly anomalies in °C, each record measured "
+             "from its own 1991–2020 average.", intro)
 
-    left, right = st.columns([2, 3])
-    with left:
+    period_col, records_col = _controls([2, 3])
+    with period_col:
         first, last = _years_picker(data, "rate_period", FIRST_RATE_YEAR)
-    with right:
+    with records_col:
         chosen = _records_picker(data, "rate_records")
 
     selected = data.loc[data["year"].between(first, last) & data["record"].isin(chosen)].copy()
@@ -189,11 +206,12 @@ def render_warming_rate(data: pd.DataFrame, intro: str | None = None, after=None
         lines.append(pd.DataFrame({"record": record, "date": [part["date"].min(), part["date"].max()],
                                    "fitted": trend.value_at(np.array([when.min(), when.max()]))}))
     fitted = pd.concat(lines, ignore_index=True)
-    colour = alt.Color("record:N", title="Temperature record", scale=_record_colour(chosen),
-                       legend=alt.Legend(symbolType="stroke", symbolStrokeWidth=3, labelLimit=260))
+    colour = alt.Color("record:N", title=None, scale=_record_colour(chosen),
+                       legend=alt.Legend(orient="bottom", columns=2, symbolType="stroke", symbolStrokeWidth=3,
+                                         labelLimit=260, labelFontSize=11, columnPadding=10))
     series = alt.Chart(smooth).mark_line(strokeWidth=1.6, opacity=0.9).encode(
         x=alt.X("date:T", title=None),
-        y=alt.Y("running:Q", title="12-month mean anomaly (°C, vs 1991–2020)"),
+        y=alt.Y("running:Q", title="°C, vs 1991–2020"),
         color=colour,
         tooltip=[alt.Tooltip("record:N", title="Record"), alt.Tooltip("date:T", title="Month ending", format="%b %Y"),
                  alt.Tooltip("running:Q", title="12-month mean (°C)", format="+.2f")],
@@ -201,11 +219,6 @@ def render_warming_rate(data: pd.DataFrame, intro: str | None = None, after=None
     trend_lines = alt.Chart(fitted).mark_line(strokeWidth=2.4, strokeDash=[6, 4]).encode(
         x="date:T", y="fitted:Q", color=colour)
     zero = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(color=MUTED, strokeDash=[2, 3]).encode(y="y:Q")
-    st.altair_chart(_style((zero + series + trend_lines).properties(height=340)), width="stretch")
-    st.caption("Colours: blue NASA GISTEMP v4, orange NOAA GlobalTemp, green Met Office HadCRUT5, yellow Berkeley "
-               "Earth. Solid lines: 12-month running means (each point averages that month and the 11 before it). "
-               "Dashed lines: the straight-line trend through every monthly value in the period. "
-               "The dotted line marks the 1991–2020 average.")
 
     # Chart 2 and table: the rates side by side with their 95% intervals.
     table = pd.DataFrame([
@@ -215,16 +228,31 @@ def render_warming_rate(data: pd.DataFrame, intro: str | None = None, after=None
          "95% interval": format_interval(t.low, t.high), "low": t.low, "high": t.high}
         for r, t in trends.items()
     ])
-    dots = alt.Chart(table).mark_point(filled=True, size=110, opacity=1).encode(
-        x=alt.X("Rate (°C per decade):Q", title=f"Warming rate, {first}–{last} (°C per decade)",
-                scale=alt.Scale(zero=False), axis=alt.Axis(format=".2f", tickCount=6)),
-        y=alt.Y("Record:N", sort=RECORD_ORDER, title=None, axis=alt.Axis(labelLimit=220)),
+    dots = alt.Chart(table).mark_point(filled=True, size=130, opacity=1).encode(
+        x=alt.X("Rate (°C per decade):Q", title="°C per decade",
+                scale=alt.Scale(zero=False), axis=alt.Axis(format=".2f", tickCount=5)),
+        y=alt.Y("Record:N", sort=RECORD_ORDER, title=None, axis=alt.Axis(labelLimit=200)),
         color=alt.Color("Record:N", scale=_record_colour(chosen), legend=None),
         tooltip=["Record:N", alt.Tooltip("Rate (°C per decade):Q", format="+.3f"), "95% interval:N", "Months:Q"],
     )
     bars = alt.Chart(table).mark_rule(strokeWidth=2.5, color=INK).encode(
         x="low:Q", x2="high:Q", y=alt.Y("Record:N", sort=RECORD_ORDER))
-    st.altair_chart(_style((bars + dots).properties(height=48 * len(table) + 50)), width="stretch")
+
+    with _panel("rate_charts"):
+        left, right = st.columns([3, 2], gap="large")
+        with left:
+            chart = (zero + series + trend_lines).properties(
+                height=380, title=_title("12-month mean and trend", "Global temperature, four records"))
+            st.altair_chart(_style(chart), width="stretch")
+        with right:
+            chart = (bars + dots).properties(height=380, title=_title("Warming rate", f"{first}–{last}, with 95% interval"))
+            st.altair_chart(_style(chart), width="stretch")
+        source_line(CHART_SOURCE)
+        st.caption("Colours: blue NASA GISTEMP v4, orange NOAA GlobalTemp, green Met Office HadCRUT5, yellow Berkeley "
+                   "Earth. Left: solid lines are 12-month running means (each point averages that month and the 11 "
+                   "before it); dashed lines are the straight-line trend through every monthly value in the period; "
+                   "the dotted line marks the 1991–2020 average. Right: dots are the rates and black bars their 95% "
+                   "intervals.")
     st.dataframe(table.drop(columns=["low", "high"]), hide_index=True, width="stretch")
 
     overlap = max(t.low for t in trends.values()) <= min(t.high for t in trends.values())
@@ -256,15 +284,12 @@ def enso_fits(selected: pd.DataFrame, lag: int) -> tuple[dict, pd.DataFrame]:
 
 def render_enso(data: pd.DataFrame, intro: str | None = None, after=None) -> None:
     """View 2: how much of the year-to-year variation follows El Niño and La Niña."""
-    _heading("enso", 2, data)
-    st.caption("Unit: °C. Global temperatures are monthly anomalies (vs 1991–2020); the Oceanic Niño Index (ONI) is the "
-               "sea-surface temperature anomaly of the central equatorial Pacific (Niño 3.4 region), in °C.")
-    _latest(data)
-    if intro:
-        st.markdown(intro)
+    _heading("enso", 2, data, "Unit: °C. Global temperatures are monthly anomalies (vs 1991–2020); the Oceanic Niño "
+             "Index (ONI) is the sea-surface temperature anomaly of the central equatorial Pacific (Niño 3.4 region), "
+             "in °C.", intro)
 
     with_oni = data.loc[data["oni"].notna()]
-    c1, c2, c3 = st.columns([2, 3, 2])
+    c1, c2, c3 = _controls([2, 3.4, 1.4])
     with c1:
         first, last = _years_picker(with_oni, "enso_period", int(with_oni["year"].min()))
     with c2:
@@ -307,9 +332,9 @@ def render_enso(data: pd.DataFrame, intro: str | None = None, after=None) -> Non
             domain=["El Niño", "Neutral", "La Niña"], range=[WARM, NEUTRAL_BAR, COOL])),
         tooltip=[alt.Tooltip("date:T", title="Month", format="%b %Y"), alt.Tooltip("oni:Q", title="ONI (°C)", format="+.2f"),
                  alt.Tooltip("phase:N", title="Phase")],
-    ).properties(height=240, title=alt.TitleParams("El Niño and La Niña (Oceanic Niño Index, three-month mean)",
-                                                   fontSize=13, anchor="start", color=INK))
-    st.altair_chart(_style(oni_chart), width="stretch")
+    ).properties(height=260, title=_title("Oceanic Niño Index (ONI)", "El Niño and La Niña, three-month mean"))
+    panel = _panel("enso_charts")
+    panel.altair_chart(_style(oni_chart), width="stretch")
 
     work = work.sort_values(["record_id", "date"])
     work["deviation_12"] = work.groupby("record_id")["deviation_c"].transform(lambda s: s.rolling(12, min_periods=12).mean())
@@ -322,7 +347,7 @@ def render_enso(data: pd.DataFrame, intro: str | None = None, after=None) -> Non
     shown = [r for r in RECORD_ORDER if r in fits]
     for i, record in enumerate(shown):
         first_panel, last_panel = i == 0, i == len(shown) - 1
-        panel = alt.Chart(long.loc[long["record"] == record]).mark_line(strokeWidth=1.6).encode(
+        record_chart = alt.Chart(long.loc[long["record"] == record]).mark_line(strokeWidth=1.6).encode(
             x=alt.X("date:T", title=None, scale=span, axis=alt.Axis(labels=last_panel, ticks=last_panel)),
             y=alt.Y("value:Q", title="°C", scale=alt.Scale(domain=[-0.3, 0.3], clamp=True), axis=alt.Axis(**y_axis)),
             color=alt.Color("part:N", title=None, scale=alt.Scale(domain=parts, range=[INK, WARM]),
@@ -335,10 +360,13 @@ def render_enso(data: pd.DataFrame, intro: str | None = None, after=None) -> Non
             # with the legend and the one with the time axis are taller to keep every plot the same size.
             height=150 + (45 if first_panel else 0) + (25 if last_panel else 0),
             title=alt.TitleParams(record, fontSize=13, fontWeight="normal", anchor="start", color=INK))
-        st.altair_chart(_style(panel), width="stretch")
-    st.caption("Lower panels: 12-month running means. The black line is how far each record sits above or below its "
-               "own gently curving long-term trend; the red dashed line is the part of that wobble that matches the "
-               "ONI from the chosen number of months earlier.")
+        panel.altair_chart(_style(record_chart), width="stretch")
+    with panel:
+        source_line(ENSO_SOURCE)
+        st.caption("Top: red bars are El Niño months (ONI +0.5 °C or more), blue bars La Niña months (−0.5 °C or "
+                   "less), grey bars neutral. Lower panels: 12-month running means. The black line is how far each "
+                   "record sits above or below its own gently curving long-term trend; the red dashed line is the "
+                   "part of that wobble that matches the ONI from the chosen number of months earlier.")
 
     table = pd.DataFrame([
         {"Record": r, "Months used": f.months,
@@ -393,14 +421,10 @@ def period_rates(series: pd.DataFrame, column: str, split: int, start: int = FIR
 
 def render_acceleration(data: pd.DataFrame, intro: str | None = None, after=None) -> None:
     """View 3: the rate before and after a chosen year, with or without the ENSO part."""
-    _heading("acceleration", 3, data)
-    st.caption("Unit: °C per decade, from monthly anomalies (vs 1991–2020). The earlier period always starts in "
-               f"{FIRST_RATE_YEAR}; the later one runs to the latest month.")
-    _latest(data)
-    if intro:
-        st.markdown(intro)
+    _heading("acceleration", 3, data, "Unit: °C per decade, from monthly anomalies (vs 1991–2020). The earlier "
+             f"period always starts in {FIRST_RATE_YEAR}; the later one runs to the latest month.", intro)
 
-    c1, c2, c3 = st.columns([1, 2, 2])
+    c1, c2, c3 = _controls([1.1, 3.2, 1.7])
     with c1:
         split = st.selectbox("Split the period in", SPLIT_YEARS, index=SPLIT_YEARS.index(2010), key="accel_split")
     with c2:
@@ -436,19 +460,56 @@ def render_acceleration(data: pd.DataFrame, intro: str | None = None, after=None
                            "high": trend.high, "95% interval": format_interval(trend.low, trend.high)})
     points = pd.DataFrame(points)
     periods = [f"{FIRST_RATE_YEAR}–{split - 1}", f"Since {split}"]
-    colour = alt.Color("Period:N", title="Period", scale=alt.Scale(domain=periods, range=[EARLIER, LATER]))
+    colour = alt.Color("Period:N", title=None, scale=alt.Scale(domain=periods, range=[EARLIER, LATER]),
+                       legend=alt.Legend(orient="bottom"))
+
+    # Left: calendar-year means (average of the selected records) with the average of the records' two lines.
+    # The lines are straight, so averaging them gives a line whose slope is the average rate in the metrics.
+    shown = series.loc[series["record"].isin(rates["record"]) & (series["year"] >= FIRST_RATE_YEAR)]
+    yearly = shown.groupby(["record", "year"])[column].agg(["mean", "size"]).reset_index()
+    yearly = yearly.loc[yearly["size"] == 12].groupby("year")["mean"].mean().reset_index()
+    yearly["when"] = yearly["year"] + 0.5
+    yearly["Period"] = np.where(yearly["year"] < split, periods[0], periods[1])
+    end = float(decimal_year(shown["year"], shown["month"]).max())
+    segments = []
+    for label, key, ends in ((periods[0], "before", [FIRST_RATE_YEAR, split]), (periods[1], "after", [split, end])):
+        values = np.mean([trend.value_at(np.array(ends, float)) for trend in rates[key]], axis=0)
+        segments.append(pd.DataFrame({"when": ends, "fitted": values, "Period": label}))
+    segments = pd.concat(segments, ignore_index=True)
+    year_dots = alt.Chart(yearly).mark_circle(size=42, opacity=0.6).encode(
+        x=alt.X("when:Q", title=None, scale=alt.Scale(domain=[FIRST_RATE_YEAR, np.ceil(end)], nice=False),
+                axis=alt.Axis(format="d", tickCount=8)),
+        y=alt.Y("mean:Q", title="°C, vs 1991–2020"), color=colour,
+        tooltip=[alt.Tooltip("year:Q", title="Year", format="d"),
+                 alt.Tooltip("mean:Q", title="Annual mean (°C)", format="+.2f")])
+    year_lines = alt.Chart(segments).mark_line(strokeWidth=3).encode(x="when:Q", y="fitted:Q", color=colour)
+    label = "El Niño and La Niña removed" if column == "adjusted_c" else "As published"
+
     offset = alt.YOffset("Period:N", sort=periods)
     rules = alt.Chart(points).mark_rule(strokeWidth=2.5).encode(
-        x=alt.X("low:Q", title="Warming rate (°C per decade)", axis=alt.Axis(format=".2f", tickCount=8)), x2="high:Q",
-        y=alt.Y("Record:N", sort=RECORD_ORDER, title=None, axis=alt.Axis(labelLimit=220)), yOffset=offset,
+        x=alt.X("low:Q", title="°C per decade", scale=alt.Scale(zero=False), axis=alt.Axis(format=".2f", tickCount=6)),
+        x2="high:Q",
+        y=alt.Y("Record:N", sort=RECORD_ORDER, title=None, axis=alt.Axis(labelLimit=200)), yOffset=offset,
         color=colour)
     dots = alt.Chart(points).mark_point(filled=True, size=100, opacity=1).encode(
         x="Rate:Q", y=alt.Y("Record:N", sort=RECORD_ORDER), yOffset=offset, color=colour,
         tooltip=["Record:N", "Period:N", alt.Tooltip("Rate:Q", title="Rate (°C per decade)", format="+.3f"),
                  "95% interval:N"])
-    st.altair_chart(_style((rules + dots).properties(height=70 * len(rates) + 50)), width="stretch")
-    st.caption("Dots are the straight-line rates; bars are their 95% intervals. Separate bars mean the two periods' "
-               "rates differ by more than the fit's uncertainty.")
+
+    with _panel("accel_charts"):
+        left, right = st.columns([3, 2], gap="large")
+        with left:
+            chart = (year_dots + year_lines).properties(
+                height=380, title=_title("Annual means and two trend lines", ["Average of the selected records", label]))
+            st.altair_chart(_style(chart), width="stretch")
+        with right:
+            chart = (rules + dots).properties(height=380, title=_title("Rates before and after", f"Split in {split}"))
+            st.altair_chart(_style(chart), width="stretch")
+        source_line(ENSO_SOURCE if column == "adjusted_c" else CHART_SOURCE)
+        st.caption(f"Grey: {periods[0]}; blue: {periods[1].lower()}. Left: dots are calendar-year means (complete "
+                   "years only) and the lines are the straight-line fits, averaged across the selected records. "
+                   "Right: dots are each record's rate and bars its 95% interval; separate bars mean the two periods' "
+                   "rates differ by more than the fit's uncertainty.")
 
     table = pd.DataFrame([
         {"Record": r["record"],

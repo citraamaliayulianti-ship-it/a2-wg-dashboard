@@ -7,6 +7,7 @@ pages 1-3 each answer one part of the question; the last page draws the conclusi
 import streamlit as st
 
 from src.stories import HOME, PAGE_ACCEL, PAGE_CONCLUSION, PAGE_ENSO, PAGE_RATE
+from src.theme import apply_style
 
 
 st.set_page_config(page_title="How fast is the world warming?", layout="wide")
@@ -21,4 +22,5 @@ navigation = st.navigation(
     ],
     position="top",
 )
+apply_style()
 navigation.run()
