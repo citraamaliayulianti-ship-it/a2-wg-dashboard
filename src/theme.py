@@ -1,93 +1,109 @@
-"""The dashboard's look: page style, section headings, source lines, footer and warming stripes.
+"""The dashboard's look: a light market-monitor style.
 
-The layout follows the pattern of public climate-indicator portals: a solid blue
-top bar, a full-width picture under it (here the warming stripes, drawn from
-this dashboard's own data rather than a photo), a line of links to every
-section, then sections with a centred green title, a centred description, the
-controls on the right, charts with a short source line under them, and a blue
-footer.
+The layout borrows the conventions of trading-platform market monitors (a dense
+monitor table with green and red changes, a chart panel and a "cheat sheet"
+explaining each row) without copying any platform's graphics. Light page
+(#f4f5f7) with white panels, dark text (#2a2e39) and a blue accent (#2962ff).
+Up and down use green #089981 and red #f23645 for marks and darker steps
+(#067d69, #d1263a) for small text, so the text reaches 4.5:1 contrast; both were
+checked for colour-vision separation and are always paired with ▲ / ▼, so
+direction is never shown by colour alone.
 """
 
 from __future__ import annotations
 
 import html
 
-import numpy as np
-import pandas as pd
+import altair as alt
 import streamlit as st
 
-BRAND = "#1d4a80"        # top bar, buttons, footer
-BRAND_DARK = "#163a66"
-ACCENT = "#5c9c2e"       # section titles (large bold text, 3:1 or better on the page background)
-PAGE_BG = "#efefed"
-TEXT = "#2b2b29"
-COOL, NEUTRAL, WARM = "#2a78d6", "#f0efec", "#e34948"
+PAGE_BG = "#f4f5f7"
+PANEL = "#ffffff"
+BORDER = "#e0e3eb"
+TEXT = "#2a2e39"
+MUTED = "#5d606b"           # 6.3:1 on panels, 5.7:1 on the page
+BRIGHT = "#131722"          # strongest ink: headings, emphasised values
+ACCENT = "#2962ff"
+UP, DOWN = "#089981", "#f23645"                 # marks
+UP_TEXT, DOWN_TEXT = "#067d69", "#d1263a"       # small text
+GRID = "#e9ebf0"
+RULE = "#9598a1"            # event lines, baselines
 
-PAGES = [  # (url path, label) for the link line under the top bar
-    ("rate", "Warming rate"),
-    ("enso", "ENSO influence"),
-    ("acceleration", "Acceleration"),
+# Light categorical slots (validated on white, adjacent pairs) and the diverging pair.
+SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6"]
+COOL, WARM, NEUTRAL = "#2a78d6", "#e34948", "#b8bbc4"
+
+PAGES = [  # (url path, label) for the footer
+    ("exposure", "1. Exposure"),
+    ("disruptions", "2. Disruptions"),
+    ("balance", "3. Balance and prices"),
     ("conclusion", "Conclusion"),
+    ("data", "Data and methods"),
 ]
 
 _CSS = f"""
 <style>
-header[data-testid="stHeader"] {{ background: {BRAND}; height: 4rem; }}
-header[data-testid="stHeader"] a[data-testid="stTopNavLink"] {{ background: transparent !important; border-radius: 0; }}
-header[data-testid="stHeader"] a[data-testid="stTopNavLink"] * {{ color: #ffffff !important; text-transform: uppercase;
-  letter-spacing: 0.06em; font-weight: 600; font-size: 0.82rem; }}
+html, body, [class*="st-"] {{ font-family: -apple-system, BlinkMacSystemFont, "Trebuchet MS", "Segoe UI", Roboto,
+  Ubuntu, sans-serif; }}
+header[data-testid="stHeader"] {{ background: {PANEL}; border-bottom: 1px solid {BORDER}; height: 3.4rem; }}
+header[data-testid="stHeader"] a[data-testid="stTopNavLink"] {{ border-radius: 4px; }}
+header[data-testid="stHeader"] a[data-testid="stTopNavLink"] * {{ color: {TEXT} !important; font-size: 0.86rem;
+  font-weight: 600; }}
 header[data-testid="stHeader"] a[data-testid="stTopNavLink"][aria-current="page"] {{
-  box-shadow: inset 0 -3px 0 #ffffff; background: rgba(255,255,255,0.12) !important; }}
-header[data-testid="stHeader"] a[data-testid="stTopNavLink"]:hover {{ background: rgba(255,255,255,0.10) !important; }}
-header[data-testid="stHeader"] button, header[data-testid="stHeader"] button * {{ color: #ffffff !important; }}
-header[data-testid="stHeader"] svg {{ fill: #ffffff; color: #ffffff; }}
-.stMainBlockContainer {{ padding-top: 5.2rem; }}
-div.stElementContainer:has(> div[data-testid="stDownloadButton"]) {{ align-self: flex-end; }}
-div[data-testid="stDownloadButton"] button {{ background: {BRAND}; color: #ffffff; border: none; border-radius: 2px;
-  text-decoration: underline; padding: 0.45rem 1rem; }}
-div[data-testid="stDownloadButton"] button:hover {{ background: {BRAND_DARK}; color: #ffffff; }}
-div[data-testid="stMetric"] {{ background: #ffffff; padding: 0.8rem 1.1rem; border-left: 4px solid {ACCENT}; }}
-div[class*="st-key-panel_"] {{ background: #ffffff; padding: 1.3rem 1.5rem 0.5rem; margin: 0.3rem 0 0.6rem; }}
+  background: rgba(41,98,255,0.10) !important; box-shadow: inset 0 -2px 0 {ACCENT}; }}
+header[data-testid="stHeader"] a[data-testid="stTopNavLink"][aria-current="page"] * {{ color: {ACCENT} !important; }}
+.stMainBlockContainer {{ padding-top: 4.6rem; padding-bottom: 0; max-width: 1380px; }}
+/* page header */
+.om-hero {{ border: 1px solid {BORDER}; border-radius: 8px; padding: 1.4rem 1.6rem 1.2rem; margin-bottom: 1.2rem;
+  background: linear-gradient(135deg, #ffffff 0%, #f5f8ff 55%, #e9efff 100%); }}
+.om-hero h1 {{ color: {BRIGHT}; font-size: 2.05rem; line-height: 1.2; margin: 0.15rem 0 0.6rem; padding: 0; }}
+.om-hero p {{ color: {TEXT}; font-size: 1.02rem; line-height: 1.55; margin: 0 0 0.5rem; max-width: 980px; }}
+.om-hero p.om-audience {{ display: inline-block; background: #e9efff; color: {TEXT}; border-radius: 8px;
+  padding: 0.5rem 0.85rem; margin: 0.2rem 0 0.6rem; font-size: 0.98rem; }}
+.om-hero p.om-audience b {{ color: #1e53e5; }}
+.om-hero p.om-for {{ color: {MUTED}; font-size: 0.92rem; }}
+.om-kicker {{ color: {ACCENT}; text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.76rem;
+  font-weight: 700; }}
+h2.om-title {{ color: {BRIGHT}; font-size: 1.55rem; line-height: 1.3; margin: 0.2rem 0 0.4rem; padding: 0; }}
+p.om-lead {{ color: {TEXT}; max-width: 1000px; line-height: 1.6; margin: 0 0 0.5rem; }}
+p.om-meta {{ color: {MUTED}; font-size: 0.85rem; margin: 0; }}
+.om-metas {{ margin: 0.2rem 0 0.8rem; }}
+p.om-source {{ color: {MUTED}; font-size: 0.8rem; margin: -0.2rem 0 0.9rem; }}
+/* panels and metrics */
+div[class*="st-key-panel_"] {{ background: {PANEL}; border: 1px solid {BORDER}; border-radius: 8px;
+  padding: 1rem 1.1rem 0.4rem; margin: 0.25rem 0 0.7rem; }}
+div[data-testid="stMetric"] {{ background: {PANEL}; border: 1px solid {BORDER}; border-radius: 8px;
+  padding: 0.7rem 0.95rem; }}
+div[data-testid="stMetricValue"] {{ font-variant-numeric: tabular-nums; color: {BRIGHT}; }}
+div[data-testid="stMetricLabel"] p {{ color: {MUTED}; font-size: 0.82rem; }}
 div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"] {{ height: 100%; }}
 div[data-testid="stColumn"] div[data-testid="stLayoutWrapper"]:has(> div[class*="st-key-panel_"]) {{ flex: 1 1 auto; }}
 div[data-testid="stColumn"] div[class*="st-key-panel_"] {{ height: 100%; }}
-.stMainBlockContainer {{ padding-bottom: 0; }}
-.stMainBlockContainer h3, .stMainBlockContainer h4 {{ color: {BRAND}; }}
-.gw-links {{ text-align: center; font-size: 0.98rem; color: {TEXT}; margin: 0.2rem 0 1.4rem; line-height: 1.9; }}
-.gw-links a {{ color: {BRAND}; text-decoration: underline; }}
-.gw-links span.gw-sep {{ color: #8a8a86; margin: 0 0.45rem; }}
-.gw-links a.gw-here {{ font-weight: 700; text-decoration: none; color: {TEXT}; }}
-.gw-kicker {{ text-align: center; color: #6b6b67; letter-spacing: 0.14em; font-size: 0.78rem;
-  text-transform: uppercase; margin-top: 1.2rem; }}
-h2.gw-title {{ color: {ACCENT}; text-align: center; font-weight: 700; font-size: 2.15rem; line-height: 1.25;
-  margin: 0.35rem auto 0.7rem; max-width: 1000px; padding: 0;
-  text-wrap: balance; }}
-p.gw-lead {{ text-align: center; max-width: 960px; margin: 0 auto 0.9rem; color: {TEXT}; font-size: 1.04rem;
-  line-height: 1.65; }}
-p.gw-meta {{ text-align: center; color: #6b6b67; font-size: 0.86rem; margin: 0 auto 0.1rem; max-width: 960px;
-  text-wrap: balance; }}
-.gw-metas {{ margin-bottom: 1.3rem; }}
-p.gw-source {{ text-align: right; color: {TEXT}; font-size: 0.86rem; margin: -0.3rem 0 1rem; }}
-.gw-footer {{ background: {BRAND}; color: #ffffff; text-align: center; padding: 1.6rem 1rem 2rem;
-  margin: 2.2rem calc(50% - 50vw) 0; font-size: 0.95rem; line-height: 2; }}
-.gw-footer a {{ color: #ffffff; text-decoration: none; margin: 0 1rem; white-space: nowrap; }}
-.gw-hero {{ position: relative; overflow: hidden; min-height: 360px; margin: -2.3rem calc(50% - 50vw) 0.4rem; }}
-.gw-hero svg {{ position: absolute; inset: 0; width: 100%; height: 100%; }}
-.gw-hero .gw-shade {{ position: absolute; inset: 0;
-  background: linear-gradient(90deg, rgba(12,24,40,0.82) 0%, rgba(12,24,40,0.55) 55%, rgba(12,24,40,0.05) 100%); }}
-.gw-hero .gw-hero-text {{ position: relative; padding: 4.2rem 3rem 3.2rem; max-width: 760px; }}
-.gw-hero h1 {{ color: #ffffff; font-size: 2.7rem; line-height: 1.12; margin: 0 0 1rem; padding: 0;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.35); }}
-.gw-hero p {{ color: #ffffff; font-size: 1.08rem; line-height: 1.55; margin: 0 0 0.8rem; font-weight: 600;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.4); }}
-.gw-hero p.gw-for {{ display: inline-block; font-weight: 400; font-size: 1rem; background: rgba(255,255,255,0.16);
-  border-radius: 10px; padding: 0.55rem 0.95rem; margin-top: 0.3rem; }}
-.gw-hero p.gw-for b {{ font-weight: 700; }}
+div.stElementContainer:has(> div[data-testid="stDownloadButton"]) {{ align-self: flex-end; }}
+div[data-testid="stDownloadButton"] button {{ background: {ACCENT}; color: #ffffff; border: none; border-radius: 4px; }}
+div[data-testid="stDownloadButton"] button:hover {{ background: #1e53e5; color: #ffffff; }}
+/* cheat sheet and cards */
+table.om-cheat {{ width: 100%; border-collapse: collapse; font-size: 0.88rem; }}
+table.om-cheat th {{ text-align: left; color: {MUTED}; font-weight: 600; border-bottom: 1px solid {BORDER};
+  padding: 0.45rem 0.6rem; }}
+table.om-cheat td {{ border-bottom: 1px solid {BORDER}; padding: 0.5rem 0.6rem; vertical-align: top; color: {TEXT}; }}
+table.om-cheat td:first-child {{ color: {BRIGHT}; font-weight: 600; white-space: nowrap; }}
+.om-cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.9rem; margin: 0.4rem 0 1rem; }}
+.om-card {{ background: {PANEL}; border: 1px solid {BORDER}; border-radius: 8px; padding: 1rem 1.1rem; }}
+.om-card a {{ color: #1e53e5; font-weight: 700; text-decoration: none; font-size: 1.02rem; }}
+.om-card a:hover {{ color: {ACCENT}; }}
+.om-card p {{ color: {TEXT}; font-size: 0.9rem; line-height: 1.5; margin: 0.45rem 0 0; }}
+.om-card .om-kicker {{ font-size: 0.7rem; }}
+.om-footer {{ border-top: 1px solid {BORDER}; color: {MUTED}; text-align: center; padding: 1.2rem 1rem 1.6rem;
+  margin-top: 2rem; font-size: 0.88rem; line-height: 2; }}
+.om-footer a {{ color: {TEXT}; text-decoration: none; margin: 0 0.9rem; white-space: nowrap; }}
+.om-footer a:hover {{ color: {BRIGHT}; }}
+.stMainBlockContainer a {{ color: #1e53e5; }}
 @media (max-width: 760px) {{
-  .gw-hero .gw-hero-text {{ padding: 2.4rem 1.3rem 2rem; }}
-  .gw-hero h1 {{ font-size: 2rem; }}
-  h2.gw-title {{ font-size: 1.6rem; }}
-  div[class*="st-key-panel_"] {{ padding: 1rem 0.7rem 0.4rem; }}
+  .om-hero {{ padding: 1.1rem 1rem 0.9rem; }}
+  .om-hero h1 {{ font-size: 1.55rem; }}
+  h2.om-title {{ font-size: 1.3rem; }}
+  div[class*="st-key-panel_"] {{ padding: 0.8rem 0.6rem 0.3rem; }}
 }}
 </style>
 """
@@ -98,78 +114,58 @@ def apply_style() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
 
 
-def link_line(current: str | None = None) -> None:
-    """'Global surface temperature: page | page | page' links under the top bar."""
-    links = []
-    for path, label in PAGES:
-        cls = ' class="gw-here"' if path == current else ""
-        links.append(f'<a href="{path}" target="_self"{cls}>{html.escape(label)}</a>')
-    st.markdown(f'<div class="gw-links">Global surface temperature: {"<span class=gw-sep>|</span>".join(links)}</div>',
-                unsafe_allow_html=True)
+def hero(title: str, question: str, audience: str, note: str) -> None:
+    st.markdown(
+        f'<div class="om-hero"><div class="om-kicker">Oil market monitor</div><h1>{html.escape(title)}</h1>'
+        f'<p>{html.escape(question)}</p>'
+        f'<p class="om-audience"><b>Audience:</b> {html.escape(audience)}.</p>'
+        f'<p class="om-for">{html.escape(note)}</p></div>',
+        unsafe_allow_html=True)
 
 
 def section_heading(title: str, lead: list[str] | str = (), kicker: str | None = None, meta: list[str] = ()) -> None:
-    """Centred green title (a real <h2>), centred description paragraphs and a small meta line."""
+    """Title (a real <h2>), description paragraphs and small meta lines (unit, latest observation)."""
     paragraphs = [lead] if isinstance(lead, str) else list(lead)
-    parts = [f'<div class="gw-kicker">{html.escape(kicker)}</div>'] if kicker else []
-    parts.append(f'<h2 class="gw-title">{html.escape(title)}</h2>')
-    parts += [f'<p class="gw-lead">{html.escape(p)}</p>' for p in paragraphs]
+    parts = [f'<div class="om-kicker">{html.escape(kicker)}</div>'] if kicker else []
+    parts.append(f'<h2 class="om-title">{html.escape(title)}</h2>')
+    parts += [f'<p class="om-lead">{html.escape(p)}</p>' for p in paragraphs]
     st.markdown("".join(parts), unsafe_allow_html=True)
-    if meta:  # unit and latest observation, one small line each
-        lines = "".join(f'<p class="gw-meta">{html.escape(line)}</p>' for line in meta)
-        st.markdown(f'<div class="gw-metas">{lines}</div>', unsafe_allow_html=True)
+    if meta:
+        lines = "".join(f'<p class="om-meta">{html.escape(line)}</p>' for line in meta)
+        st.markdown(f'<div class="om-metas">{lines}</div>', unsafe_allow_html=True)
 
 
 def source_line(text: str) -> None:
-    """Short source note, right-aligned under a chart."""
-    st.markdown(f'<p class="gw-source">{html.escape(text)}</p>', unsafe_allow_html=True)
+    """Short source note under a chart."""
+    st.markdown(f'<p class="om-source">{html.escape(text)}</p>', unsafe_allow_html=True)
+
+
+def cards(items: list[tuple[str, str, str, str]]) -> None:
+    """Link cards: (kicker, title, url path, description)."""
+    body = "".join(
+        f'<div class="om-card"><div class="om-kicker">{html.escape(k)}</div>'
+        f'<a href="{path}" target="_self">{html.escape(t)}</a><p>{html.escape(d)}</p></div>'
+        for k, t, path, d in items)
+    st.markdown(f'<div class="om-cards">{body}</div>', unsafe_allow_html=True)
 
 
 def footer() -> None:
-    links = '<a href="./" target="_self">Overview</a>' + "".join(
+    links = '<a href="./" target="_self">Monitor</a>' + "".join(
         f'<a href="{path}" target="_self">{html.escape(label)}</a>' for path, label in PAGES)
-    st.markdown(f'<div class="gw-footer">{links}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="om-footer">{links}<br>Data: U.S. Energy Information Administration; '
+                f'IMF PortWatch (AIS data from the UN Global Platform). Calculations by this dashboard.</div>',
+                unsafe_allow_html=True)
 
 
-# ---------------------------------------------------------------- warming stripes
-
-def _mix(a: str, b: str, t: float) -> str:
-    """Blend two hex colours (t = 0 gives a, t = 1 gives b)."""
-    ca = [int(a[i:i + 2], 16) for i in (1, 3, 5)]
-    cb = [int(b[i:i + 2], 16) for i in (1, 3, 5)]
-    return "#" + "".join(f"{round(x + (y - x) * t):02x}" for x, y in zip(ca, cb))
-
-
-def stripe_colour(value: float, limit: float = 1.0) -> str:
-    """Diverging blue - neutral - red, centred on zero."""
-    t = float(np.clip(value / limit, -1, 1))
-    return _mix(NEUTRAL, WARM, t) if t >= 0 else _mix(NEUTRAL, COOL, -t)
-
-
-def annual_means(data: pd.DataFrame, record_id: str = "noaa") -> pd.DataFrame:
-    """Complete calendar years only, for one dataset."""
-    part = data.loc[data["record_id"] == record_id]
-    counts = part.groupby("year")["anomaly_c"].agg(["mean", "size"])
-    return counts.loc[counts["size"] == 12, ["mean"]].reset_index()
-
-
-def stripes_centre(years: pd.DataFrame) -> tuple[float, str]:
-    """Stripes are centred on the 20th-century average (or on the years before 2001 that the data hold)."""
-    century = years.loc[years["year"].between(1901, 2000)]
-    first = int(century["year"].min()) if not century.empty else int(years["year"].min())
-    return float(century["mean"].mean() if not century.empty else years["mean"].mean()), f"{first}–2000"
-
-
-def stripes_svg(data: pd.DataFrame) -> str:
-    """One vertical stripe per complete year of the NOAA dataset, filling its container."""
-    years = annual_means(data)
-    if years.empty:
-        return ""
-    centre, _ = stripes_centre(years)
-    width = 1000 / len(years)
-    rects = "".join(
-        f'<rect x="{i * width:.2f}" y="0" width="{width + 0.6:.2f}" height="100" '
-        f'fill="{stripe_colour(v - centre, 0.8)}"/>'
-        for i, v in enumerate(years["mean"])
+def style_chart(chart: alt.Chart) -> alt.Chart:
+    """Chart chrome: hairline grid, muted axes, transparent background on the white panel."""
+    return (
+        chart.configure_axis(gridColor=GRID, domainColor="#c9ccd4", tickColor="#c9ccd4", labelColor=MUTED,
+                             titleColor=MUTED, titleFontWeight="normal", labelFontSize=11.5, titleFontSize=11.5)
+        .configure_view(strokeWidth=0)
+        .configure_legend(labelColor=TEXT, titleColor=MUTED, orient="top", labelFontSize=12, titleFontSize=11.5)
+        .configure_title(anchor="start", fontSize=14.5, fontWeight=600, color=BRIGHT, offset=10,
+                         subtitleColor=MUTED, subtitleFontSize=11.5)
+        .configure_header(labelColor=TEXT, titleColor=MUTED, labelFontSize=12.5, labelFontWeight=600)
+        .properties(background="transparent")
     )
-    return f'<svg viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">{rects}</svg>'
