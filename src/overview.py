@@ -36,7 +36,7 @@ def hero(data: pd.DataFrame, title: str, question: str, audience: str) -> None:
     st.markdown(
         f'<div class="gw-hero">{stripes_svg(data)}<div class="gw-shade"></div><div class="gw-hero-text">'
         f'<h1>{html.escape(title)}</h1><p>{html.escape(question)}</p>'
-        f'<p class="gw-for">For {html.escape(audience[0].lower() + audience[1:])}.</p></div></div>',
+        f'<p class="gw-for"><b>Audience:</b> {html.escape(audience)}.</p></div></div>',
         unsafe_allow_html=True,
     )
     _, centre = stripes_centre(years)

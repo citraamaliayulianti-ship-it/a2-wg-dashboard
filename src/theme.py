@@ -80,7 +80,9 @@ p.gw-source {{ text-align: right; color: {TEXT}; font-size: 0.86rem; margin: -0.
   text-shadow: 0 1px 3px rgba(0,0,0,0.35); }}
 .gw-hero p {{ color: #ffffff; font-size: 1.08rem; line-height: 1.55; margin: 0 0 0.8rem; font-weight: 600;
   text-shadow: 0 1px 2px rgba(0,0,0,0.4); }}
-.gw-hero p.gw-for {{ font-weight: 400; font-size: 0.95rem; opacity: 0.95; }}
+.gw-hero p.gw-for {{ display: inline-block; font-weight: 400; font-size: 1rem; background: rgba(255,255,255,0.16);
+  border-radius: 10px; padding: 0.55rem 0.95rem; margin-top: 0.3rem; }}
+.gw-hero p.gw-for b {{ font-weight: 700; }}
 @media (max-width: 760px) {{
   .gw-hero .gw-hero-text {{ padding: 2.4rem 1.3rem 2rem; }}
   .gw-hero h1 {{ font-size: 2rem; }}
